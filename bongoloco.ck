@@ -12,7 +12,7 @@ GameTrak gt;
 
 // Constants
 10 => int N;
-"bongo_high.wav" => string path;
+"kenkeni.aiff" => string path;
 
 // Arrays to hold bufs and panners
 SndBuf bufs_bongo_high[N];
@@ -74,7 +74,7 @@ fun dur randomInterval() {
     1.0 - Math.pow(1.0 - gt.axis[2], curve) => float eased;
 
     // Map to interval range (0.2s to 2.0s)
-    0.02 + (1.8 * (1.0 - eased)) => float sec;
+    0.01 + (1.8 * (1.0 - eased)) => float sec;
 
     return Std.rand2f(sec * (1 - 0.9 * randomnessRange), sec * (1 + 0.9 * randomnessRange))::second;
 }
@@ -99,8 +99,8 @@ fun void playRandom() {
 }
 
 fun triggerSound(SndBuf buf, int c) {
-    buf.pos(0);
-    1000::samp + ((1 - Math.pow(gt.axis[2], 3)) * 6600)::samp => now;
+    buf.pos(1500);
+    5000::samp + ((1 - Math.pow(gt.axis[2], 3)) * 6600)::samp => now;
     buf.pos((buf.length() / samp) $ int);
 }
 
@@ -111,9 +111,9 @@ bongoEnv.set(0::ms, 0::ms, 1.0, 0::ms);
 
 fun void changeBongoHighEnvelope() {
   while (true) {
-    bongoEnv.attackTime((20 + (1 - gt.axis[5]) * 200)::ms);
+    bongoEnv.attackTime((20 + (1 - gt.axis[5]) * 350)::ms);
     bongoEnv.decayTime((20 + (1 - gt.axis[5]) * 400)::ms);
-    bongoEnv.releaseTime((60 + (1 - gt.axis[5]) * 400)::ms);
+    bongoEnv.releaseTime((60 + (1 - gt.axis[5]) * 550)::ms);
     10::ms => now;
   }
 }
@@ -126,7 +126,7 @@ fun void pulseBongoHighEnvelope() {
           (40 + (1 - gt.axis[5]) * 600)::ms => now;   // brief press
           bongoEnv.keyOff();
 
-          (80 + (1 - gt.axis[5]) * 600)::ms => now; // interval between pulses
+          (80 + (1 - gt.axis[5]) * 400)::ms => now; // interval between pulses
         } else {
           bongoEnv.keyOn();
         }
@@ -136,7 +136,7 @@ fun void pulseBongoHighEnvelope() {
 // Spork it
 spork ~ playRandom();
 
-spork ~ playAtTempo(b);
+// spork ~ playAtTempo(b);
 
 spork ~ pulseBongoHighEnvelope();
 
@@ -207,7 +207,7 @@ fun void gametrak()
                     { msg.axisPosition => gt.axis[msg.which]; }
                     else
                     {
-                        Math.min(0.78, (1 - ((msg.axisPosition + 1) / 2) - DEADZONE) / 0.78)=> gt.axis[msg.which];
+                        Math.min(0.78, (1 - ((msg.axisPosition + 1) / 2) - DEADZONE) / 0.78) / 0.78=> gt.axis[msg.which];
                         if( gt.axis[msg.which] < 0 ) 0 => gt.axis[msg.which];
                     }
                 }
