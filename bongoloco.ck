@@ -8,7 +8,7 @@ bongoEnv.set(0::ms, 0::ms, 1.0, 0::ms);
 GameTrak gt;
 
 // Need to cycle through bufs for rapid fire section
-60 => int N;
+48 => int N;
 0 => int current;
 "kenkeni.aiff" => string path;
 
@@ -19,6 +19,7 @@ Pan2 pans_bongo_high[N];
 // Connect each buffer to a pan and to dac
 // Need panned buses and a center bus that can handle envelope
 for (int i; i < N; i++) {
+    0.0 => bufs_bongo_high[i].gain;
     bufs_bongo_high[i] => pans_bongo_high[i];
     pans_bongo_high[i].left => bongoBusLeft;
     pans_bongo_high[i].right => bongoBusRight;
@@ -26,26 +27,33 @@ for (int i; i < N; i++) {
     path => bufs_bongo_high[i].read;
 }
 
-1 => int isRandom; // after rapid fire go into stable rhythm
+0 => int state;
+/*
+0 --> random hits
+1 --> consistent hits
+2 --> locked bpm (stored in quarterIntervalMs)
+3 --> funky beat using buf rate (stored in kenkeniRateRhythm)
+*/
+600.0 => float quarterIntervalMs;
 
-// fun dur getBeatDur() {
-//     // Linearly interpolate between 60 and 220 BPM
-//     60.0 + (220.0 - 60.0) * Math.fabs((gt.axis[0] + 1) / 2.0) => float bpm;
-//     return (60.0 / bpm)::second; // duration of a beat
-// }
-
-// // Function to play SndBuf at tempo
-// fun void playAtTempo(SndBuf buf) {
-//     while (true) {
-//         buf.pos(0);       // rewind
-//         getBeatDur() => now; // wait based on tempo
-//     }
-// }
+0.86 => float lowKenkeniHit;
+0.9 => float midKenkeniHit;
+0.92 => float highKenKeniHit;
+[
+    lowKenkeniHit, midKenkeniHit, highKenKeniHit, 
+    midKenkeniHit, highKenKeniHit, midKenkeniHit,
+    lowKenkeniHit, midKenkeniHit, highKenKeniHit, 
+    midKenkeniHit, highKenKeniHit, midKenkeniHit,
+    lowKenkeniHit, midKenkeniHit, highKenKeniHit, 
+    midKenkeniHit, highKenKeniHit, midKenkeniHit,
+    highKenKeniHit, highKenKeniHit, midKenkeniHit,
+    highKenKeniHit, midKenkeniHit, highKenKeniHit,
+] @=> float kenkeniRateRhythm[];
 
 // Balance gains between panned buses and center bus
 fun bongoHighPanMix() {
   while (true) {
-    if (!isRandom) {
+    if (state) {
         0.0 => bongoBusLeft.gain;
         0.0 => bongoBusRight.gain;
         1.0 => bongoBusCenter.gain;
@@ -59,42 +67,74 @@ fun bongoHighPanMix() {
   }
 }
 
-fun dur randomInterval() {
-    float randomnessRange;
+fun dur getInterval() {
+    if (state >= 2) {
+        return (quarterIntervalMs / 3)::ms;
 
-    3.0 => float curve;
+        // if (gt.axis[2] < 0.3) {
+        //     // Sixteenth notes = 1/4 of quarter
+        //     return (quarterIntervalMs / 4)::ms;
+        // } else if (gt.axis[2] < 0.5) {
+        //     // Triplet eighths = 1/3 of quarter
+        //     return (quarterIntervalMs / 3)::ms;
+        // } else if (gt.axis[2] < 0.7) {
+        //     // Eighth notes = 1/2 of quarter
+        //     return (quarterIntervalMs / 2)::ms;
+        // }
+        // // Quarter notes
+        // return quarterIntervalMs::ms;
+    }
+
 
     // Apply eased mapping. more "gt.axis[2]" --> less "sec"
+    3.0 => float curve;
     1.0 - Math.pow(1.0 - gt.axis[2], curve) => float eased;
-    0.01 + (1.8 * (1.0 - eased)) => float sec;
+    10 + (1800 * (1.0 - eased)) => float intervalMs;
 
-    if (gt.axis[2] >= 0.8 || !isRandom) {
-        return sec::second;
+    if (gt.axis[2] >= 0.8 || state) {
+        intervalMs * 3 => quarterIntervalMs; // assume interval is a triplet
+        return intervalMs::ms;
     }
     
-    // add herky jerkiness if isRandom
-    1 - (gt.axis[2] / 0.8) => randomnessRange;
-    return Std.rand2f(sec * (1 - 0.9 * randomnessRange), sec * (1 + 0.9 * randomnessRange))::second;
+    // add herky jerkiness if state = 0
+    1 - (gt.axis[2] / 0.8) => float randomnessRange;
+    return Std.rand2f(intervalMs * (1 - 0.9 * randomnessRange), intervalMs * (1 + 0.9 * randomnessRange))::ms;
 }
 
 // Main function to play buffer at random intervals
-fun void playRandom() {
+fun void playHits() {
     while (true) {
-        if (isRandom) {
+        if (!state && gt.axis[2] < 0.1) {
+            10::ms => now;
+            continue;
+        } else if (!state) {
             Std.rand2f(0.3, 1.0) => bufs_bongo_high[current].gain;
             Std.rand2f(-1.0 * (1 - Math.pow(gt.axis[2], 3)), 1.0 * (1 - Math.pow(gt.axis[2], 3))) => pans_bongo_high[current].pan;
+            0.5 + (gt.axis[0] + 1.0) / 2.0 => bufs_bongo_high[current].rate;
+        } else if (state == 1) {
+            0.8 => bufs_bongo_high[current].gain;
+            0.5 + (gt.axis[0] + 1.0) / 2.0 => bufs_bongo_high[current].rate;
+        } else if (state == 2) {
+            current - 1 => int lockedRateIndex;
+            if (current - 1 < 0) {
+                24 - 1 => lockedRateIndex;
+            }
+            bufs_bongo_high[lockedRateIndex].rate() => bufs_bongo_high[current].rate;
+            bufs_bongo_high[current].gain() - (current % 3 * 0.2) => bufs_bongo_high[current].gain;
+            24 => N;
+        } else if (state >= 3) {
+            kenkeniRateRhythm[current % 24] => bufs_bongo_high[current].rate;
+            bufs_bongo_high[current].gain() - (current % 3 * 0.1) => bufs_bongo_high[current].gain;
         }
-
-        0.5 + (gt.axis[0] + 1.0) / 2.0 => bufs_bongo_high[current].rate;
         spork ~ triggerSound(bufs_bongo_high[current], current);
         (1 + current) % N => current;
-        randomInterval() => now;
+        getInterval() => now;
     }
 }
 
 fun void triggerSound(SndBuf buf, int c) {
     // adjust for rate (manipulated by gt.axis[0])
-    buf.pos(1500.0 / buf.rate());
+    buf.pos((1500.0 / buf.rate()) $ int);
     (12000.0 / buf.rate())::samp => now;
     // 5000::samp + ((1 - Math.pow(gt.axis[2], 3)) * 6600)::samp => now;
     buf.pos((buf.length() / samp) $ int);
@@ -110,7 +150,7 @@ fun void changeBongoHighEnvelope() {
 }
 
 fun void pulseBongoHighEnvelope() {
-  bongoEnv.keyOn();
+    bongoEnv.keyOn();
     while (true) {
         if (gt.axis[5] > 0.2) {
           bongoEnv.keyOn();
@@ -127,7 +167,7 @@ fun void pulseBongoHighEnvelope() {
 
 spork ~ bongoHighPanMix();
 
-spork ~ playRandom();
+spork ~ playHits();
 
 spork ~ pulseBongoHighEnvelope();
 
@@ -191,7 +231,8 @@ fun void gametrak()
             else if( msg.isButtonDown() )
             {
                 <<< "button", msg.which, "down" >>>;
-                (isRandom + 1) % 2 => isRandom;
+                state + 1 => state;
+                <<< "NEW STATE", state >>>;
             }
             
             // joystick button up
