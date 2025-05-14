@@ -34,21 +34,12 @@ for (int i; i < N; i++) {
 1 --> MELODIC (consistent hits, discretized rates based on frequency ratios)
 2 --> RHYTHMIC (discretized envelope rates at high levels, discretized rates at lower levels based on rhythms)
 */
-600.0 => float quarterIntervalMs;
+720.0 => float quarterIntervalMs;
+0.0 => float discretizedGt0;
+Event syncEnvelopeRhythm;
 
-0.86 => float lowKenkeniHit;
-0.9 => float midKenkeniHit;
-0.92 => float highKenKeniHit;
-[
-    lowKenkeniHit, midKenkeniHit, highKenKeniHit, 
-    midKenkeniHit, highKenKeniHit, midKenkeniHit,
-    lowKenkeniHit, midKenkeniHit, highKenKeniHit, 
-    midKenkeniHit, highKenKeniHit, midKenkeniHit,
-    lowKenkeniHit, midKenkeniHit, highKenKeniHit, 
-    midKenkeniHit, highKenKeniHit, midKenkeniHit,
-    highKenKeniHit, highKenKeniHit, midKenkeniHit,
-    highKenKeniHit, midKenkeniHit, highKenKeniHit,
-] @=> float kenkeniRateRhythm[];
+25::ms => dur bongoInterval;
+
 
 // Balance gains between panned buses and center bus
 fun bongoHighPanMix() {
@@ -67,35 +58,58 @@ fun bongoHighPanMix() {
   }
 }
 
-fun dur getInterval() {
-
-        // if (gt.axis[2] < 0.3) {
-        //     // Sixteenth notes = 1/4 of quarter
-        //     return (quarterIntervalMs / 4)::ms;
-        // } else if (gt.axis[2] < 0.5) {
-        //     // Triplet eighths = 1/3 of quarter
-        //     return (quarterIntervalMs / 3)::ms;
-        // } else if (gt.axis[2] < 0.7) {
-        //     // Eighth notes = 1/2 of quarter
-        //     return (quarterIntervalMs / 2)::ms;
-        // }
-        // // Quarter notes
-        // return quarterIntervalMs::ms;
-
-
+fun void fetchIntervalPreSync() {
     // Apply eased mapping. more "gt.axis[2]" --> less "sec"
-    3.0 => float curve;
-    1.0 - Math.pow(1.0 - gt.axis[2], curve) => float eased;
-    10 + (1800 * (1.0 - eased)) => float intervalMs;
+    while (!mode) {
+        3.0 => float curve;
+        1.0 - Math.pow(1.0 - gt.axis[2], curve) => float eased;
+        10 + (1800 * (1.0 - eased)) => float intervalMs;
 
-    if (gt.axis[2] >= 0.8 || mode) {
-        intervalMs * 3 => quarterIntervalMs; // assume interval is a triplet
-        return intervalMs::ms;
+        if (gt.axis[2] >= 0.8 || mode) {
+            // intervalMs * 3 => quarterIntervalMs; // assume interval is a triplet
+            intervalMs::ms => bongoInterval;
+        }
+        
+        // add herky jerkiness if mode = 0
+        1 - (gt.axis[2] / 0.8) => float randomnessRange;
+        Std.rand2f(intervalMs * (1 - 0.9 * randomnessRange), intervalMs * (1 + 0.9 * randomnessRange))::ms => bongoInterval;
+        10::ms => now;
     }
-    
-    // add herky jerkiness if mode = 0
-    1 - (gt.axis[2] / 0.8) => float randomnessRange;
-    return Std.rand2f(intervalMs * (1 - 0.9 * randomnessRange), intervalMs * (1 + 0.9 * randomnessRange))::ms;
+}
+
+fun void fetchIntervalPostSync() {
+    syncEnvelopeRhythm => now;
+    while (true) {
+        if (mode == 1) {
+            if (gt.axis[2] < 0.1) {
+                90::ms => bongoInterval; // 32nd note --> prepare for MODE == 2
+            } else if (gt.axis[2] < 0.3) {
+                25::ms => bongoInterval; // 40hz (root)
+            } else if (gt.axis[2] < 0.5) {
+                (125 / 6)::ms => bongoInterval; // 48hz (minor third)
+            } else if (gt.axis[2] < 0.7) {
+                (50 / 3)::ms => bongoInterval; // 60hz (perfect fifth)
+            } else if (gt.axis[2] < 0.9) {
+                (125 / 8)::ms => bongoInterval; // 64hz (minor sixth)
+            } else {
+                (50/4)::ms => bongoInterval; // 80hz (octave)
+            }
+
+        } else if (mode == 2) {
+            if (gt.axis[2] < 0.3) {
+                90::ms => bongoInterval; // 32
+            } else if (gt.axis[2] < 0.5) {
+                180::ms => bongoInterval; // sixteenth
+            } else if (gt.axis[2] < 0.7) {
+                240::ms => bongoInterval; // triplet
+            } else if (gt.axis[2] < 0.9) {
+                360::ms => bongoInterval; // eighth
+            } else {
+                720::ms => bongoInterval; // quarter 
+            }
+        }
+        360::ms => now; // eighth note
+    }
 }
 
 // Main function to play buffer at random intervals
@@ -112,7 +126,8 @@ fun void playHits() {
         }
         spork ~ triggerSound(bufs_bongo_high[current], current);
         (1 + current) % N => current;
-        getInterval() => now;
+        <<< "bongo Interval", bongoInterval >>>;
+        bongoInterval => now;
     }
 }
 
@@ -128,36 +143,87 @@ fun void triggerSound(SndBuf buf, int c) {
 
 fun void changeBongoHighEnvelope() {
   while (true) {
-    bongoEnv.attackTime((20 + (1 - Math.max(0, gt.axis[0])) * 350)::ms);
-    bongoEnv.decayTime((20 + (1 - Math.pow(Math.max(0, gt.axis[0]), 0.8)) * 300)::ms);
-    bongoEnv.releaseTime((60 + (1 - Math.pow(Math.max(0, gt.axis[0]), 0.8)) * 500)::ms);
+    if (!mode) Math.max(0, gt.axis[0]) => discretizedGt0;
+    bongoEnv.attackTime((20 + (1 - discretizedGt0) * 350)::ms);
+    bongoEnv.decayTime((20 + (1 - Math.pow(discretizedGt0, 0.8)) * 300)::ms);
+    bongoEnv.releaseTime((60 + (1 - Math.pow(discretizedGt0, 0.8)) * 500)::ms);
     10::ms => now;
   }
 }
 
-fun void pulseBongoHighEnvelope() {
-    bongoEnv.keyOn();
-    while (true) {
-        if (Math.max(0, gt.axis[0]) > 0.1) {
-          bongoEnv.keyOn();
-          (20 + (1 - Math.max(0, gt.axis[0])) * 600)::ms => now; 
-          bongoEnv.keyOff();
 
-          (40 + (1 - Math.max(0, gt.axis[0])) * 500)::ms => now; 
+fun void pulseBongoHighEnvelopePreSync() {
+    bongoEnv.keyOn();
+    while (!mode) {
+        if (Math.max(0, gt.axis[0]) > 0.1) {
+            bongoEnv.keyOn();
+            (20 + (1 - Math.max(0, gt.axis[0])) * 600)::ms => now; 
+            bongoEnv.keyOff();
+
+            (40 + (1 - Math.max(0, gt.axis[0])) * 500)::ms => now; 
         } else {
-          bongoEnv.keyOn();
+            bongoEnv.keyOn();
+            10::ms => now;
         }
-        10::ms => now;
+    }
+}
+
+fun void pulseBongoHighEnvelopePostSync() {
+    syncEnvelopeRhythm => now;
+    float tempDiscretizedGt0; // in case it changes during envelope
+    while (mode == 1) {
+        discretizedGt0 => tempDiscretizedGt0;
+        bongoEnv.keyOn();
+        (20 + (1 - tempDiscretizedGt0) * 600)::ms => now; 
+        bongoEnv.keyOff();
+
+        (40 + (1 - tempDiscretizedGt0) * 500)::ms => now; 
+    }
+    bongoEnv.attackTime(0::ms);
+    bongoEnv.keyOn();
+}
+
+// Did a lot of math to get these values
+// Essentially the discretizedGt0 creates ratio-based rhythms
+// when the value is used in pulseBongoHighEnvelope
+fun void discretizeEnvelope() {
+    syncEnvelopeRhythm => now;
+    while (true) {
+        Math.max(0, gt.axis[0]) => float positiveGt0;
+        if (gt.axis[0] <= -0.5) {
+            // <<< "quarter" >>>;
+            0.7272727273 => discretizedGt0;
+        } else if (gt.axis[0] <= -0.15) {
+            // <<< "eight" >>>;
+
+            0.8363636364 => discretizedGt0;
+        } else if (positiveGt0 <= 0.15) {
+            // <<< "triplet" >>>;
+            0.8909090909 => discretizedGt0;
+        } else if (gt.axis[0] <= 0.5) {
+            // <<< "sixteenth" >>>;
+            0.9454545455 => discretizedGt0;
+        } else {
+            // <<< "32" >>>;
+            0.9727272727 => discretizedGt0;
+        }
+        360::ms => now; // eig TIMING
     }
 }
 
 spork ~ bongoHighPanMix();
 
+spork ~ fetchIntervalPreSync();
+spork ~ fetchIntervalPostSync();
+
 spork ~ playHits();
 
-spork ~ pulseBongoHighEnvelope();
+spork ~ pulseBongoHighEnvelopePreSync();
+spork ~ pulseBongoHighEnvelopePostSync();
 
 spork ~ changeBongoHighEnvelope();
+
+spork ~ discretizeEnvelope();
 
 // ----------- GAMETRAK -----------
 
@@ -219,6 +285,9 @@ fun void gametrak()
                 <<< "button", msg.which, "down" >>>;
                 mode + 1 => mode;
                 <<< "NEW mode", mode >>>;
+                if (mode == 1) {
+                    syncEnvelopeRhythm.broadcast();
+                }
             }
             
             // joystick button up
