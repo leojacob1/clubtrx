@@ -63,16 +63,17 @@ fun void fetchIntervalPreSync() {
     while (!mode) {
         3.0 => float curve;
         1.0 - Math.pow(1.0 - gt.axis[2], curve) => float eased;
-        10 + (1800 * (1.0 - eased)) => float intervalMs;
+        (50/4) + (1800 * (1.0 - eased)) => float intervalMs;
 
         if (gt.axis[2] >= 0.8 || mode) {
             // intervalMs * 3 => quarterIntervalMs; // assume interval is a triplet
             intervalMs::ms => bongoInterval;
+        } else {
+            // add herky jerkiness if mode = 0
+            1 - (gt.axis[2] / 0.8) => float randomnessRange;
+            Std.rand2f(intervalMs * (1 - 0.9 * randomnessRange), intervalMs * (1 + 0.9 * randomnessRange))::ms => bongoInterval;
         }
         
-        // add herky jerkiness if mode = 0
-        1 - (gt.axis[2] / 0.8) => float randomnessRange;
-        Std.rand2f(intervalMs * (1 - 0.9 * randomnessRange), intervalMs * (1 + 0.9 * randomnessRange))::ms => bongoInterval;
         10::ms => now;
     }
 }
@@ -81,9 +82,7 @@ fun void fetchIntervalPostSync() {
     syncEnvelopeRhythm => now;
     while (true) {
         if (mode == 1) {
-            if (gt.axis[2] < 0.1) {
-                90::ms => bongoInterval; // 32nd note --> prepare for MODE == 2
-            } else if (gt.axis[2] < 0.3) {
+            if (gt.axis[2] < 0.3) {
                 25::ms => bongoInterval; // 40hz (root)
             } else if (gt.axis[2] < 0.5) {
                 (125 / 6)::ms => bongoInterval; // 48hz (minor third)
@@ -96,17 +95,26 @@ fun void fetchIntervalPostSync() {
             }
 
         } else if (mode == 2) {
-            if (gt.axis[2] < 0.3) {
-                90::ms => bongoInterval; // 32
-            } else if (gt.axis[2] < 0.5) {
-                180::ms => bongoInterval; // sixteenth
-            } else if (gt.axis[2] < 0.7) {
-                240::ms => bongoInterval; // triplet
-            } else if (gt.axis[2] < 0.9) {
-                360::ms => bongoInterval; // eighth
-            } else {
-                720::ms => bongoInterval; // quarter 
-            }
+            //if (bongoInterval < 90::ms) {
+                // while (bongoInterval * 1.01 < 90::ms) {
+                //     bongoInterval * 1.01 => bongoInterval;
+                //     100::ms => now;
+                // }
+                90::ms => bongoInterval;
+            //} else {
+                if (gt.axis[2] < 0.3) {
+                    90::ms => bongoInterval; // 32
+                } else if (gt.axis[2] < 0.5) {
+                    180::ms => bongoInterval; // sixteenth
+                } else if (gt.axis[2] < 0.7) {
+                    240::ms => bongoInterval; // triplet
+                } else if (gt.axis[2] < 0.9) {
+                    360::ms => bongoInterval; // eighth
+                } else {
+                    720::ms => bongoInterval; // quarter 
+                }
+            //}
+            
         }
         360::ms => now; // eighth note
     }
@@ -126,7 +134,6 @@ fun void playHits() {
         }
         spork ~ triggerSound(bufs_bongo_high[current], current);
         (1 + current) % N => current;
-        <<< "bongo Interval", bongoInterval >>>;
         bongoInterval => now;
     }
 }
@@ -179,6 +186,7 @@ fun void pulseBongoHighEnvelopePostSync() {
 
         (40 + (1 - tempDiscretizedGt0) * 500)::ms => now; 
     }
+    // if (mode == ...) // gradually turn off envelope
     bongoEnv.attackTime(0::ms);
     bongoEnv.keyOn();
 }
@@ -225,17 +233,43 @@ spork ~ changeBongoHighEnvelope();
 
 spork ~ discretizeEnvelope();
 
+// ------------ PAD ------------
+
+0 => int pad_device;
+if( me.args() ) me.arg(0) => Std.atoi => pad_device;
+
+MidiIn min;
+MidiOut mout;
+
+if( !mout.open(0) ) me.exit();
+MidiMsg pad_msg;
+
+if( !min.open( pad_device ) ) me.exit();
+
+fun void runPad() {
+  while (true) {
+    min => now;
+    while (min.recv(pad_msg)) {
+      pad_msg.data1 => int inputType; // pad number
+      pad_msg.data2 => int pad;
+      pad_msg.data3 => int velocity;
+      <<< inputType, pad, velocity >>>;
+    }
+  }
+}
+spork ~ runPad();
+
 // ----------- GAMETRAK -----------
 
 0 => float DEADZONE;
 
-0 => int device;
-if( me.args() ) me.arg(0) => Std.atoi => device;
+0 => int gt_device;
+if( me.args() ) me.arg(0) => Std.atoi => gt_device;
 
 Hid trak;
 HidMsg msg;
 
-if( !trak.openJoystick( device ) ) me.exit();
+if( !trak.openJoystick( gt_device ) ) me.exit();
 
 <<< "joystick '" + trak.name() + "' ready", "" >>>;
 
@@ -283,10 +317,13 @@ fun void gametrak()
             else if( msg.isButtonDown() )
             {
                 <<< "button", msg.which, "down" >>>;
-                mode + 1 => mode;
-                <<< "NEW mode", mode >>>;
-                if (mode == 1) {
+
+                if (mode == 0) {
+                    mode + 1 => mode;
                     syncEnvelopeRhythm.broadcast();
+                } else if (mode == 1) {
+                    // snap to exact target to ensure perfect ending
+                    mode + 1 => mode;
                 }
             }
             
