@@ -12,8 +12,8 @@ GameTrak gt;
 48 => int N;
 0 => int current;
 "kenkeni.aiff" => string kenkeni_path;
-"triangle_long.wav" => string triangle_long_path;
-"triangle_short.wav" => string triangle_short_path;
+"triangle_long_1.wav" => string triangle_long_path;
+"triangle_short_1.wav" => string triangle_short_path;
 "printingpress.wav" => string printing_path;
 "progbass3.wav" => string bass_path;
 "progbass4.wav" => string bass2_path;
@@ -53,7 +53,7 @@ adsr_triangle_short.set(5::ms, 0::ms, 1.0, 5::ms);
 
 0.8 => gain_single_bongo.gain;
 0.4 => gain_triangle_long.gain;
-0.4 => gain_triangle_short.gain;
+1.0 => gain_triangle_short.gain;
 0.2 => gain_print.gain;
 0.7 => gain_bass.gain;
 0.7 => gain_bass2.gain;
@@ -220,27 +220,57 @@ fun playBassOnce() {
 fun void playBass() {
     while (true) {
         for (56 => int i; i < 64; i++) {
-            if (padState[i]) {
-                if (padState[i] == 1) {
-                    spork ~ playBassOnce();
-                    (quarterIntervalMs)::ms => now;
-                } else if (padState[i] == 2) {
-                    (quarterIntervalMs / 2)::ms => now;
-                    spork ~ playBassOnce();
-                    (quarterIntervalMs / 2)::ms => now;
-                } else if (padState[i] == 3) {
-                    spork ~ playBassOnce();
-                    (quarterIntervalMs / 6)::ms => now;
-                    spork ~ playBassOnce();
-                    (quarterIntervalMs / 6)::ms => now;
-                    spork ~ playBassOnce();
-                    (quarterIntervalMs / 6)::ms => now;
-                }
-            } else {
+            if (!padState[i]) {
+                quarterIntervalMs::ms => now;
+            } else if (padState[i] == 1) {
+                spork ~ playBassOnce();
                 (quarterIntervalMs)::ms => now;
+            } else if (padState[i] == 2) {
+                (quarterIntervalMs / 2)::ms => now;
+                spork ~ playBassOnce();
+                (quarterIntervalMs / 2)::ms => now;
+            } else if (padState[i] == 3) {
+                spork ~ playBassOnce();
+                (quarterIntervalMs / 6)::ms => now;
+                spork ~ playBassOnce();
+                (quarterIntervalMs / 6)::ms => now;
+                spork ~ playBassOnce();
+                (quarterIntervalMs / 6)::ms => now;
             }
         }
+    }
+}
 
+fun playTriangleOnce() {
+    0 => buf_triangle_short.pos;
+    adsr_triangle_short.keyOn();
+    buf_triangle_short.samples()::samp - 5::ms => now;
+    adsr_triangle_short.keyOff();
+    5::ms => now;
+}
+
+fun void playTriangle() {
+    while (true) {
+        for (40 => int i; i < 48; i++) {
+            if (!padState[i]) {
+                quarterIntervalMs::ms => now;
+            } else if (padState[i] == 1) {
+                spork ~ playTriangleOnce();
+                quarterIntervalMs::ms => now;
+            } else if (padState[i] == 2) {
+                spork ~ playTriangleOnce();
+                (quarterIntervalMs / 2)::ms => now;
+                spork ~ playTriangleOnce();
+                (quarterIntervalMs / 2)::ms => now;
+            } else if (padState[i] == 3) {
+                spork ~ playTriangleOnce();
+                (quarterIntervalMs / 3)::ms => now;
+                spork ~ playTriangleOnce();
+                (quarterIntervalMs / 3)::ms => now;
+                spork ~ playTriangleOnce();
+                (quarterIntervalMs / 3)::ms => now;
+            }
+        }
     }
 }
 
@@ -267,16 +297,16 @@ if( !min.open( pad_device ) ) me.exit();
 3 => int RED;
 9 => int GREEN;
 
+0 => int isShifted; // is shift currently pressed
+
 fun void runPad() {
-    // Shred manualDinoSh;
-    // int activeManualPad;
     while (true) {
         min => now;
         while (min.recv(pad_msg)) {
             pad_msg.data1 => int inputType; // pad number
             pad_msg.data2 => int pad;
             pad_msg.data3 => int velocity;
-            <<< inputType, pad, velocity >>>;
+            // <<< inputType, pad, velocity >>>;
             if (mode >= 1 && pad >= 0 && pad < 7 && inputType == NOTE_ON) {
                 // Play melody of bongo instrument using 8th row (bottom row)
                 1 => padState[pad];
@@ -305,24 +335,40 @@ fun void runPad() {
                         mout.send(NOTE_ON, i, RED);
                     }
                 }
+            } else if (40 <= pad && pad < 48 && inputType == NOTE_ON) {
+                (padState[pad] + 1) % 4 => int nextState;
+                if (isShifted) 0 => nextState;
+                nextState => padState[pad];
+
+                if (nextState == 0) {
+                    mout.send(NOTE_ON, pad, OFF);
+                } else if (nextState == 1) {
+                    mout.send(NOTE_ON, pad, RED);
+                } else if (nextState == 2) {
+                    mout.send(NOTE_ON, pad, GREEN);
+                } else if (nextState == 3) {
+                    spork ~ flashButton(pad);
+                }
             } else if (48 <= pad && pad < 56 && inputType == NOTE_ON) {
                 if (!padState[pad]) {
                     1 => padState[pad];
-                    mout.send(144, pad, RED);
+                    mout.send(NOTE_ON, pad, RED);
                 } else {
                     0 => padState[pad];
-                    mout.send(144, pad, OFF);
+                    mout.send(NOTE_ON, pad, OFF);
                 }
-            } else if (pad >= 56 && pad < 64 && inputType == 144) {
+            } else if (pad >= 56 && pad < 64 && inputType == NOTE_ON) {
                 // Bass single rhythms
                 (padState[pad] + 1) % 4 => int nextState;
+                if (isShifted) 0 => nextState;
                 nextState => padState[pad];
+
                 if (nextState == 0) {
-                    mout.send(144, pad, OFF);
+                    mout.send(NOTE_ON, pad, OFF);
                 } else if (nextState == 1) {
-                    mout.send(144, pad, RED);
+                    mout.send(NOTE_ON, pad, RED);
                 } else if (nextState == 2) {
-                    mout.send(144, pad, GREEN);
+                    mout.send(NOTE_ON, pad, GREEN);
                 }
             } else if (pad == 89) {
                 if (inputType == NOTE_ON) {
@@ -331,6 +377,14 @@ fun void runPad() {
                 } else if (inputType == NOTE_OFF) {
                     1.0 => bongoMuter.gain;
                     mout.send(NOTE_ON, 89, OFF);
+                }
+            } else if (pad == 98) {
+                if (inputType == NOTE_ON) {
+                    1 => isShifted;
+                    mout.send(NOTE_ON, 98, RED);
+                } else if (inputType == NOTE_OFF) {
+                    0 => isShifted;
+                    mout.send(NOTE_ON, 98, OFF);
                 }
             }
         }
@@ -399,6 +453,7 @@ fun void gametrak()
                     spork ~ prepMode1();
                     spork ~ playPrint();
                     spork ~ playBass();
+                    spork ~ playTriangle();
 
                 } else if (mode == 1) {
                     spork ~ slowBongoInstrument();
@@ -477,7 +532,16 @@ fun void slowBongoInstrument() {
     
 }
 
-fun setUp() {
+fun void flashButton(int pad) {
+    while (padState[pad] == 3) {
+        mout.send(NOTE_ON, pad, GREEN);
+        125::ms => now;
+        mout.send(NOTE_ON, pad, OFF);
+        125::ms => now;
+    }
+}
+
+fun void setUp() {
     for (56 => int i; i < 64; i++) {
         0 => padState[i];
     }
@@ -509,17 +573,17 @@ fun setUp() {
     for (0 => int i; i < 8; i++) {
         0 => padState[i];
     }
-    mout.send(144, 82, OFF);
-    mout.send(144, 83, OFF);
-    mout.send(144, 84, OFF);
-    mout.send(144, 85, OFF);
-    mout.send(144, 16, OFF);
-    mout.send(144, 23, OFF);
-    mout.send(144, 8, OFF);
-    mout.send(144, 15, OFF);
-    mout.send(144, 0, OFF);
-    mout.send(144, 7, OFF);
-    mout.send(144, 89, OFF);
+    mout.send(NOTE_ON, 82, OFF);
+    mout.send(NOTE_ON, 83, OFF);
+    mout.send(NOTE_ON, 84, OFF);
+    mout.send(NOTE_ON, 85, OFF);
+    mout.send(NOTE_ON, 16, OFF);
+    mout.send(NOTE_ON, 23, OFF);
+    mout.send(NOTE_ON, 8, OFF);
+    mout.send(NOTE_ON, 15, OFF);
+    mout.send(NOTE_ON, 0, OFF);
+    mout.send(NOTE_ON, 7, OFF);
+    mout.send(NOTE_ON, 89, OFF);
 
     for (int i; i < 64; i++) {
         if (padState[i] == 0) {
