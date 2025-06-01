@@ -1,6 +1,6 @@
 Gain bongoBusLeft => dac.left;
 Gain bongoBusRight => dac.right;
-Gain bongoBusCenter => ADSR bongoEnv => LPF lpf_bongo => JCRev rev_bongo => dac;
+Gain bongoBusCenter => Gain bongoMuter => ADSR bongoEnv => LPF lpf_bongo => JCRev rev_bongo => dac;
 
 10000 => lpf_bongo.freq;
 0.0 => rev_bongo.mix;
@@ -276,7 +276,7 @@ fun void runPad() {
             pad_msg.data1 => int inputType; // pad number
             pad_msg.data2 => int pad;
             pad_msg.data3 => int velocity;
-            // <<< inputType, pad, velocity >>>;
+            <<< inputType, pad, velocity >>>;
             if (mode >= 1 && pad >= 0 && pad < 7 && inputType == NOTE_ON) {
                 // Play melody of bongo instrument using 8th row (bottom row)
                 1 => padState[pad];
@@ -323,6 +323,14 @@ fun void runPad() {
                     mout.send(144, pad, RED);
                 } else if (nextState == 2) {
                     mout.send(144, pad, GREEN);
+                }
+            } else if (pad == 89) {
+                if (inputType == NOTE_ON) {
+                    0.0 => bongoMuter.gain;
+                    mout.send(NOTE_ON, 89, RED);
+                } else if (inputType == NOTE_OFF) {
+                    1.0 => bongoMuter.gain;
+                    mout.send(NOTE_ON, 89, OFF);
                 }
             }
         }
