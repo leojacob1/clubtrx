@@ -17,6 +17,7 @@ GameTrak gt;
 "printingpress.wav" => string printing_path;
 "progbass3.wav" => string bass_path;
 "progbass4.wav" => string bass2_path;
+"gag.wav" => string gag_path;
 
 // Sndbufs for rhythmic elements in second part
 SndBuf buf_single_bongo => ADSR adsr_single_bongo => Gain gain_single_bongo => dac;
@@ -25,6 +26,7 @@ SndBuf buf_triangle_short => ADSR adsr_triangle_short => Gain gain_triangle_shor
 SndBuf buf_print => Gain gain_print => Pan2 pan_print => dac;
 SndBuf buf_bass => Gain gain_bass => dac;
 SndBuf buf_bass2 => Gain gain_bass2 => dac;
+SndBuf buf_gag => Gain gain_gag => dac;
 
 // Arrays to hold bufs and panners
 SndBuf bufs_bongo_high[N];
@@ -33,12 +35,13 @@ Pan2 pans_bongo_high[N];
 
 // Connect each buffer to a pan and to dac
 // Need panned buses and a center bus that can handle envelope
-kenkeni_path => buf_single_bongo.read;
-triangle_long_path => buf_triangle_long.read;
-triangle_short_path => buf_triangle_short.read;
-printing_path => buf_print.read;
-bass_path => buf_bass.read;
-bass2_path => buf_bass2.read;
+"sounds/" + kenkeni_path => buf_single_bongo.read;
+"sounds/" + triangle_long_path => buf_triangle_long.read;
+"sounds/" + triangle_short_path => buf_triangle_short.read;
+"sounds/" + printing_path => buf_print.read;
+"sounds/" + bass_path => buf_bass.read;
+"sounds/" + bass2_path => buf_bass2.read;
+"sounds/" + gag_path => buf_gag.read;
 
 buf_single_bongo.samples() => buf_single_bongo.pos;
 buf_triangle_long.samples() => buf_triangle_long.pos;
@@ -46,6 +49,7 @@ buf_triangle_short.samples() => buf_triangle_short.pos;
 buf_print.samples() => buf_print.pos;
 buf_bass.samples() => buf_bass.pos;
 buf_bass2.samples() => buf_bass2.pos;
+buf_gag.samples() => buf_gag.pos;
 
 adsr_single_bongo.set(5::ms, 0::ms, 1.0, 5::ms);
 adsr_triangle_long.set(5::ms, 0::ms, 1.0, 5::ms);
@@ -57,6 +61,7 @@ adsr_triangle_short.set(5::ms, 0::ms, 1.0, 5::ms);
 0.2 => gain_print.gain;
 0.7 => gain_bass.gain;
 0.7 => gain_bass2.gain;
+0.7 => gain_gag.gain;
 
 for (int i; i < N; i++) {
     adsr_bongo_high[i].set(5::ms, 0::ms, 1.0, 5::ms);
@@ -64,7 +69,7 @@ for (int i; i < N; i++) {
     pans_bongo_high[i].left => bongoBusLeft;
     pans_bongo_high[i].right => bongoBusRight;
     pans_bongo_high[i] => bongoBusCenter;
-    kenkeni_path => bufs_bongo_high[i].read;
+    "sounds/" + kenkeni_path => bufs_bongo_high[i].read;
     bufs_bongo_high[i].samples() => bufs_bongo_high[i].pos;
 }
 
@@ -241,6 +246,37 @@ fun void playBass() {
     }
 }
 
+fun playGagOnce() {
+  ((gt.axis[0] + 1.0) / 2.0) * 0.4 + 0.6 => buf_gag.rate;
+  Math.max(0, gt.axis[2] - 0.1) => gain_gag.gain;
+  8500 => buf_gag.pos;
+}
+
+fun void playGag() {
+    while (true) {
+        for (32 => int i; i < 40; i++) {
+            if (!padState[i]) {
+                quarterIntervalMs::ms => now;
+            } else if (padState[i] == 1) {
+                spork ~ playGagOnce();
+                quarterIntervalMs::ms => now;
+            } else if (padState[i] == 2) {
+                spork ~ playGagOnce();
+                (quarterIntervalMs / 2)::ms => now;
+                spork ~ playGagOnce();
+                (quarterIntervalMs / 2)::ms => now;
+            } else if (padState[i] == 3) {
+                spork ~ playGagOnce();
+                (quarterIntervalMs / 3)::ms => now;
+                spork ~ playGagOnce();
+                (quarterIntervalMs / 3)::ms => now;
+                spork ~ playGagOnce();
+                (quarterIntervalMs / 3)::ms => now;
+            }
+        }
+    }
+}
+
 fun playTriangleOnce() {
     0 => buf_triangle_short.pos;
     adsr_triangle_short.keyOn();
@@ -335,7 +371,23 @@ fun void runPad() {
                         mout.send(NOTE_ON, i, RED);
                     }
                 }
+            } else if (32 <= pad && pad < 40 && inputType == NOTE_ON) {
+                // gag
+                (padState[pad] + 1) % 4 => int nextState;
+                if (isShifted) 0 => nextState;
+                nextState => padState[pad];
+
+                if (nextState == 0) {
+                    mout.send(NOTE_ON, pad, OFF);
+                } else if (nextState == 1) {
+                    mout.send(NOTE_ON, pad, RED);
+                } else if (nextState == 2) {
+                    mout.send(NOTE_ON, pad, GREEN);
+                } else if (nextState == 3) {
+                    spork ~ flashButton(pad);
+                }
             } else if (40 <= pad && pad < 48 && inputType == NOTE_ON) {
+                // triangle
                 (padState[pad] + 1) % 4 => int nextState;
                 if (isShifted) 0 => nextState;
                 nextState => padState[pad];
@@ -350,6 +402,7 @@ fun void runPad() {
                     spork ~ flashButton(pad);
                 }
             } else if (48 <= pad && pad < 56 && inputType == NOTE_ON) {
+                // printing
                 if (!padState[pad]) {
                     1 => padState[pad];
                     mout.send(NOTE_ON, pad, RED);
@@ -454,6 +507,7 @@ fun void gametrak()
                     spork ~ playPrint();
                     spork ~ playBass();
                     spork ~ playTriangle();
+                    spork ~ playGag();
 
                 } else if (mode == 1) {
                     spork ~ slowBongoInstrument();
