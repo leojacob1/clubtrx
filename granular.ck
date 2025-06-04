@@ -1,4 +1,3 @@
-Std.atoi(me.arg(0)) => int explosionId;
 0 => int currentChordIndex;
 1 => int GROUP_NUM; // 1 or 2 based on explosionId
 4 => int NUM_CHORD_VOICES;
@@ -445,7 +444,7 @@ fun void main()
             chords.size() - 1 => currentChordIndex;
         }
         fireGrain(chords[currentChordIndex][0]); // bass note
-        fireGrain(chords[currentChordIndex][1 + (explosionId % NUM_CHORD_VOICES)]); // specific voice
+        fireGrain(chords[currentChordIndex][1 + (0 % NUM_CHORD_VOICES)]); // specific voice
 
         // amount here naturally controls amount of overlap between grains
         (GRAIN_LENGTH / 2 + Math.random2f(0,GRAIN_FIRE_RANDOM)::ms)/2 => now;

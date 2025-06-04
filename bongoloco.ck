@@ -514,6 +514,8 @@ fun void gametrak()
 
                 } else if (mode == 1) {
                     spork ~ slowBongoInstrument() @=> slowBongoInstrumentId;
+                } else if (mode == 2) {
+                    0.0 => gain_bongo.gain;
                 } else if (mode == 3) {
                     slowBongoInstrumentId.exit();
                     spork ~ playBongoBuild();
@@ -568,7 +570,8 @@ fun void prepMode1() {
     // Lock in base envelope and pitch for bongo instrument
     // default is eight notes
     ((20 + (1 - Math.max(0, discretizedGt0)) * 600) + (40 + (1 - Math.max(0, discretizedGt0)) * 500)) * 2 => quarterIntervalMs; 
-    bongoInterval => bongoIntervalBase;
+    (1000 / 174.614)::ms * 2 => bongoIntervalBase;
+    // bongoInterval => bongoIntervalBase;
     mout.send(NOTE_ON, 0, GREEN);
     for (1 => int i; i < 5; i++) {
         mout.send(NOTE_ON, i, RED);
