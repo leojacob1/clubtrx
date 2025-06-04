@@ -1,5 +1,4 @@
 0 => int currentChordIndex;
-1 => int GROUP_NUM; // 1 or 2 based on explosionId
 4 => int NUM_CHORD_VOICES;
 // overall volume
 1 => float MAIN_VOLUME;
@@ -29,248 +28,81 @@ Gain g => NRev reverb => PoleZero blocker => dac;
 // connect
 // load file into a LiSa (use one LiSa per sound)
 SoundFiles soundfiles;
-// Define the unused indexes
-[7, 15, 16, 17, 18, 20, 22, 23, 25, 27] @=> int UNUSED_PLUCK[];
-[2, 7, 8] @=> int UNUSED_BASS[];
-
-// Function to check if an index is in the unused list
-fun int isUnused(int unusedIndexes[], int index) {
-    for (int i; i < unusedIndexes.size(); i++) {
-        if (unusedIndexes[i] == index) return 1;
-    }
-    return 0;
-}
 
 // Load sound files into lisas
 LiSa lisas[soundfiles.pluck.size()];
 for (int i; i < soundfiles.pluck.size(); i++) {
-    if (!isUnused(UNUSED_PLUCK, i)) {
-        load(soundfiles.pluck[i]) @=> lisas[i];
-        lisas[i].chan(0) => g;
-        <<<soundfiles.pluck[i], "lisa loaded" >>>;
-    }
+    load(soundfiles.pluck[i]) @=> lisas[i];
+    lisas[i].chan(0) => g;
+    <<< soundfiles.pluck[i], "lisa loaded" >>>;
 }
 
 // Load sound files into lisaBass
 LiSa lisaBass[soundfiles.bass.size()];
 for (int i; i < soundfiles.bass.size(); i++) {
-    if (!isUnused(UNUSED_BASS, i)) {
-        load(soundfiles.bass[i]) @=> lisaBass[i];
-        lisaBass[i].chan(0) => g;
-        <<<soundfiles.bass[i], "lisa loaded" >>>;
+    load(soundfiles.bass[i]) @=> lisaBass[i];
+    lisaBass[i].chan(0) => g;
+    <<<soundfiles.bass[i], "lisa loaded" >>>;
+}
+
+
+int chords[4][4];
+
+[0, 3, 7, 10] @=> chords[0];
+[5, 8, 0, 3] @=> chords[1];
+[10, 2, 5, 9] @=> chords[2];
+[3, 7, 10, 3] @=> chords[3];
+
+0.0 => float keyHz;
+0 => int closestKeyIndex;
+
+fun void listenKey()
+{
+    OscIn oin;
+    OscMsg msg;
+    7777 => oin.port;
+    oin.addAddress( "/key, f" );
+    while ( true )
+        {
+        oin => now;
+
+        while ( oin.recv( msg ) )
+        {
+            msg.getFloat(0) => keyHz;
+            <<< "original", keyHz >>>;
+            getTargetHzInOctave(keyHz) => keyHz;
+            <<< "octave adjust", keyHz >>>;
+            getClosestKeyIndex(keyHz) => closestKeyIndex;
+            keyHz / soundfiles.bassHz[closestKeyIndex] => GRAIN_PLAY_RATE;
+            <<< "rate", GRAIN_PLAY_RATE >>>;
+        }
     }
 }
 
-<<< "LOADED" >>>;
+fun void listenMode() {
+    OscIn oin;
+    OscMsg msg;
+    7777 => oin.port;
+    oin.addAddress( "/mode, i" );
+    while ( true )
+        {
+        oin => now;
 
-// F
-[
-lisaBass[3], 
-lisas[0], 
-lisas[6], 
-lisas[3], 
-lisas[8]
-] @=> LiSa F[];
-
-
-// d minor
-[
-lisaBass[1], //d
-lisas[1], // D
-lisas[6], 
-lisas[3],
-lisas[9]
-] @=> LiSa d[];
-
-// A/C# 
-[
-    lisaBass[9], 
-    lisas[24],   // A-1
-    lisas[28], // C#
-    lisas[2],  // E
-    lisas[6],    // A
-] @=> LiSa AC[];
-
-
-// a minor /C# 
-[
-    lisaBass[0], //C
-    lisas[24],   // A-1
-    lisas[0], // C
-    lisas[2],  // E
-    lisas[6],    // A
-] @=> LiSa ac[];
-
-
-// Fmaj7 with BASSS
-[
-    lisaBass[3],
-    lisas[21],  // F-1
-    lisas[2],    // E
-    lisas[6],    // A
-    lisas[8],   // C2
-] @=> LiSa fmaj7[];
-
-
-// Eb
-[
-    lisaBass[10],
-    lisas[21],  // G-1
-    lisas[4],    // G
-    lisas[30],    // Bb
-    lisas[0],   // D2
-] @=> LiSa Eb[];
-
-
-// C6
-[
-lisaBass[0],
-lisas[0], //C
-lisas[4], //G
-lisas[8], //C
-lisas[10], //E
-] @=> LiSa C6[];
-
-// A7
-[
-lisaBass[6], //A
-lisas[4], //G
-lisas[29], //C#
-lisas[10], //E2
-lisas[23], // A-1
-] @=> LiSa A7[];
-
-
-// d6
-[
-lisaBass[1],
-lisas[1], //D
-lisas[6], //A
-lisas[9], //D2
-lisas[11], //F2
-] @=> LiSa d6[];
-
-
-// Eb6
-[
-lisaBass[10],
-lisas[19], //Eb
-lisas[30], //Bb
-lisas[31], //Eb2
-lisas[12], //G2
-] @=> LiSa Eb6[];
-
-// AbMaj7
-[
-lisaBass[5],
-lisas[5], //Ab
-lisas[8], //C2
-lisas[31], //Eb2
-lisas[12], //G2
-] @=> LiSa AbMaj7[];
-
-
-// fmin
-[
-lisaBass[3],
-lisas[3], //F
-lisas[8], //C2
-lisas[11], //F2
-lisas[13], //Ab2
-] @=> LiSa fmin[];
-
-// C# Maj7
-[
-lisaBass[9], // C#
-lisas[3], //F
-lisas[8], //C2
-lisas[11], //F2
-lisas[13], //Ab2
-] @=> LiSa Csharp[];
-
-// CMaj7
-[
-lisaBass[0], // C
-lisas[0], //C
-lisas[7], //B
-lisas[10], //E2
-lisas[12], //G2
-] @=> LiSa Cmaj7[];
-
-
-[
-    F,
-    d,
-    AC,
-    ac,
-    fmaj7,
-    Eb,
-    C6,
-    A7,
-    d6, 
-    //Eb6,
-    //AbMaj7,
-    //fmin,
-    Csharp,
-    Cmaj7
-
-] @=> LiSa chords[][];
-
-
-
-fun void listenExplosion()
-{
+        while ( oin.recv( msg ) )
+        {
+            if (msg.getInt(0) == 1) {
                 spork ~ gametrak() @=> gametrakSh;
-            spork ~ trackSynthParams() @=> trackSynthParamsSh;
-            spork ~ main() @=> mainSh;
-            eon => now;
+                spork ~ trackSynthParams() @=> trackSynthParamsSh;
+                spork ~ main() @=> mainSh;
+            } else {
+                gametrakSh.exit();
+                trackSynthParamsSh.exit();
+                mainSh.exit();
+            }
 
-//   OscIn oin;
-//   OscMsg msg;
-//   7777 => oin.port;
-//   oin.addAddress( "/explosion, i i" );
-//   while ( true )
-//   {
-//     oin => now;
-
-//     while ( oin.recv( msg ) )
-//     {
-//       if ( msg.getInt(0) == -1)
-//       {
-//         if (!gametrakSh.running())
-//         {
-//             <<< "EXPLOSION TIME " >>>;
-//             spork ~ gametrak() @=> gametrakSh;
-//             spork ~ trackSynthParams() @=> trackSynthParamsSh;
-//             spork ~ main() @=> mainSh;
-//         }
-//       }
-//       else if (msg.getInt(0) == -9)
-//       {
-//         if (gametrakSh.running())
-//         { 
-//             <<< "PSYCH! Undo explosion" >>>;
-//             gametrakSh.exit();
-//             trackSynthParamsSh.exit();
-//             mainSh.exit();
-//         }
-//         <<< "Set up for explosion" >>>;
-//       }
-//       else if (GROUP_NUM == 1)
-//       {
-//         msg.getInt(0) => currentChordIndex;
-//         <<< "Set chord index", currentChordIndex >>>;
-//       }
-//       else
-//       {
-//         <<< "error: UNPARSABLE EXPLOSION MESSAGE!" >>>;
-//       }
-//     }
-//   }
+        }
+    }
 }
-
-// "cmaj7" => global string chord;
-
 
 // reverb mix
 .05 => reverb.mix;
@@ -312,8 +144,6 @@ if( !trak.openJoystick( GAME_TRAK_DEVICE ) ) me.exit();
 82 => int KEY_UP;
 
 // spork it
-// spork ~ print();
-//spork ~ kb();
 
 class GameTrak
 {
@@ -372,6 +202,7 @@ fun void gametrak()
             else if( msg.isButtonDown())
             {                
                 <<< "button", msg.which, "down" >>>;
+                (currentChordIndex + 1) % 4 => currentChordIndex;
             }
             
             // joystick button up
@@ -440,11 +271,10 @@ fun void main()
 {
     while( true )
     {
-        if (currentChordIndex >= chords.size()) {
-            chords.size() - 1 => currentChordIndex;
-        }
-        fireGrain(chords[currentChordIndex][0]); // bass note
-        fireGrain(chords[currentChordIndex][1 + (0 % NUM_CHORD_VOICES)]); // specific voice
+        fireGrain(lisaBass[(closestKeyIndex + chords[currentChordIndex][0]) % 12]);
+        fireGrain(lisas[(closestKeyIndex + chords[currentChordIndex][1]) % 12]); 
+        fireGrain(lisas[(closestKeyIndex + chords[currentChordIndex][2]) % 12]); 
+        fireGrain(lisas[(closestKeyIndex + chords[currentChordIndex][3]) % 12]);
 
         // amount here naturally controls amount of overlap between grains
         (GRAIN_LENGTH / 2 + Math.random2f(0,GRAIN_FIRE_RANDOM)::ms)/2 => now;
@@ -507,66 +337,6 @@ fun void print()
     }
 }
 
-// keyboard
-fun void kb()
-{
-    // infinite event loop
-    while( true )
-    {
-        // wait on HidIn as event
-        hi => now;
-        
-        // messages received
-        while( hi.recv( msg ) )
-        {
-            // button donw
-            if( msg.isButtonDown() )
-            {
-                if( msg.which == KEY_LEFT )
-                {
-                    .005 -=> GRAIN_PLAY_RATE;
-                    if( GRAIN_PLAY_RATE < 0 ) 0 => GRAIN_PLAY_RATE;
-                }
-                else if( msg.which == KEY_RIGHT )
-                {
-                    .005 +=> GRAIN_PLAY_RATE;
-                    if( GRAIN_PLAY_RATE > 2 ) 2 => GRAIN_PLAY_RATE;
-                }
-                else if( msg.which == KEY_DOWN )
-                {
-                    .01 -=> GRAIN_POSITION;
-                    if( GRAIN_POSITION < 0 ) 0 => GRAIN_POSITION;
-                }
-                else if( msg.which == KEY_UP )
-                {
-                    .01 +=> GRAIN_POSITION;
-                    if( GRAIN_POSITION > 1 ) 1 => GRAIN_POSITION;
-                }
-                else if( msg.which == KEY_COMMA )
-                {
-                    .95 *=> GRAIN_LENGTH;
-                    if( GRAIN_LENGTH < 1::ms ) 1::ms => GRAIN_LENGTH;
-                }
-                else if( msg.which == KEY_PERIOD )
-                {
-                    1.05 *=> GRAIN_LENGTH;
-                    if( GRAIN_LENGTH > 1::second ) 1::second => GRAIN_LENGTH;
-                }
-                else if( msg.which == KEY_DASH )
-                {
-                    .9 *=> GRAIN_POSITION_RANDOM;
-                    if( GRAIN_POSITION_RANDOM < .000001 ) .000001 => GRAIN_POSITION_RANDOM;
-                }
-                else if( msg.which == KEY_EQUAL )
-                {
-                    1.1 *=> GRAIN_POSITION_RANDOM;
-                    if( GRAIN_POSITION_RANDOM > 1 ) 1 => GRAIN_POSITION_RANDOM;
-                }
-            }
-        }
-    }
-}
-
 // load file into a LiSa
 fun LiSa load( string filename )
 {
@@ -595,6 +365,40 @@ fun LiSa load( string filename )
     return lisa;
 }
 
-spork ~ listenExplosion();
+spork ~ listenKey();
+spork ~ listenMode();
+
+fun int getClosestKeyIndex(float targetHz) {
+    <<< "getting closest key from", targetHz >>>;
+    0 => int minIndex;
+
+    Math.fabs(targetHz - soundfiles.bassHz[0]) => float minDiff;
+    
+    for (1 => int i; i < 12; i++) {
+        if (Math.fabs(targetHz - soundfiles.bassHz[i]) < minDiff) {
+            i => minIndex;
+            Math.fabs(targetHz - soundfiles.bassHz[i]) => minDiff;
+        }
+    }
+    <<< "minindex", minIndex, "mindistance", minDiff >>>;
+    return minIndex;
+}
+
+fun float getTargetHzInOctave(float targetHz) {
+    0 => int isRightOctave;
+    while (!isRightOctave) {
+        if (targetHz < soundfiles.bassHz[0]) {
+            <<< "too low!, bumping up" >>>;
+            2 * targetHz => targetHz;
+        } else if (targetHz > soundfiles.bassHz[0] * 2) {
+            <<< "too high! dropping down" >>>;
+            0.5 * targetHz => targetHz;
+        } else {
+            <<< "right octave" >>>;
+            1 => isRightOctave;
+        }
+    }
+    return targetHz;
+}
 
 eon => now;

@@ -1,3 +1,9 @@
+"224.0.0.1" => string hostname;
+7777 => int port;
+
+OscOut xmit;
+xmit.dest( hostname, port );
+
 Gain bongoBusLeft => dac.left;
 Gain bongoBusRight => dac.right;
 Gain bongoBusCenter => Gain gain_bongo => ADSR bongoEnv => LPF lpf_bongo => JCRev rev_bongo => dac;
@@ -517,6 +523,9 @@ fun void gametrak()
                 } else if (mode == 2) {
                     0.0 => gain_bongo.gain;
                 } else if (mode == 3) {
+                    xmit.start( "/mode" );
+                    1 => xmit.add;
+                    xmit.send();
                     slowBongoInstrumentId.exit();
                     spork ~ playBongoBuild();
                 }
@@ -570,8 +579,12 @@ fun void prepMode1() {
     // Lock in base envelope and pitch for bongo instrument
     // default is eight notes
     ((20 + (1 - Math.max(0, discretizedGt0)) * 600) + (40 + (1 - Math.max(0, discretizedGt0)) * 500)) * 2 => quarterIntervalMs; 
-    (1000 / 174.614)::ms * 2 => bongoIntervalBase;
-    // bongoInterval => bongoIntervalBase;
+    bongoInterval => bongoIntervalBase;
+    <<< "Sending /key ", bongoIntervalBase, (1000.0)::ms / bongoIntervalBase >>>;
+    xmit.start( "/key" );
+    (1000.0)::ms / bongoIntervalBase => xmit.add;
+    xmit.send();
+
     mout.send(NOTE_ON, 0, GREEN);
     for (1 => int i; i < 5; i++) {
         mout.send(NOTE_ON, i, RED);
