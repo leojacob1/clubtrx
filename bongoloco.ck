@@ -1,6 +1,6 @@
 Gain bongoBusLeft => dac.left;
 Gain bongoBusRight => dac.right;
-Gain bongoBusCenter => Gain bongoMuter => ADSR bongoEnv => LPF lpf_bongo => JCRev rev_bongo => dac;
+Gain bongoBusCenter => Gain gain_bongo => ADSR bongoEnv => LPF lpf_bongo => JCRev rev_bongo => dac;
 
 10000 => lpf_bongo.freq;
 0.0 => rev_bongo.mix;
@@ -12,22 +12,23 @@ GameTrak gt;
 48 => int N;
 0 => int current;
 "kenkeni.aiff" => string kenkeni_path;
-"triangle_long_1.wav" => string triangle_long_path;
-"triangle_short_1.wav" => string triangle_short_path;
+"bip.wav" => string hat_path;
+"bip_1.wav" => string clap_path;
+"bleep.wav" => string bleep_path;
 "printingpress.wav" => string printing_path;
 "progbass3.wav" => string bass_path;
 "progbass4.wav" => string bass2_path;
-"gag.wav" => string gag_path;
 
 // Sndbufs for rhythmic elements in second part
 SndBuf buf_single_bongo => ADSR adsr_single_bongo => Gain gain_single_bongo => dac;
-SndBuf buf_triangle_long => ADSR adsr_triangle_long => Gain gain_triangle_long => dac;
-SndBuf buf_triangle_short => ADSR adsr_triangle_short => Gain gain_triangle_short => dac;
 SndBuf buf_print => Gain gain_print => Pan2 pan_print => dac;
 SndBuf buf_bass => Gain gain_bass => dac;
 SndBuf buf_bass2 => Gain gain_bass2 => dac;
-SndBuf buf_gag => Gain gain_gag => dac;
+SndBuf buf_hat => Gain gain_hat => dac;
+SndBuf buf_clap => Gain gain_clap => dac;
+SndBuf buf_bleep => JCRev rev_bleep => Gain gain_bleep => dac;
 
+0.05 => rev_bleep.mix;
 // Arrays to hold bufs and panners
 SndBuf bufs_bongo_high[N];
 ADSR adsr_bongo_high[N];
@@ -36,32 +37,30 @@ Pan2 pans_bongo_high[N];
 // Connect each buffer to a pan and to dac
 // Need panned buses and a center bus that can handle envelope
 "sounds/" + kenkeni_path => buf_single_bongo.read;
-"sounds/" + triangle_long_path => buf_triangle_long.read;
-"sounds/" + triangle_short_path => buf_triangle_short.read;
 "sounds/" + printing_path => buf_print.read;
 "sounds/" + bass_path => buf_bass.read;
 "sounds/" + bass2_path => buf_bass2.read;
-"sounds/" + gag_path => buf_gag.read;
+"sounds/" + hat_path => buf_hat.read;
+"sounds/" + clap_path => buf_clap.read;
+"sounds/" + bleep_path => buf_bleep.read;
 
 buf_single_bongo.samples() => buf_single_bongo.pos;
-buf_triangle_long.samples() => buf_triangle_long.pos;
-buf_triangle_short.samples() => buf_triangle_short.pos;
 buf_print.samples() => buf_print.pos;
 buf_bass.samples() => buf_bass.pos;
 buf_bass2.samples() => buf_bass2.pos;
-buf_gag.samples() => buf_gag.pos;
+buf_hat.samples() => buf_hat.pos;
+buf_clap.samples() => buf_clap.pos;
+buf_bleep.samples() => buf_bleep.pos;
 
 adsr_single_bongo.set(5::ms, 0::ms, 1.0, 5::ms);
-adsr_triangle_long.set(5::ms, 0::ms, 1.0, 5::ms);
-adsr_triangle_short.set(5::ms, 0::ms, 1.0, 5::ms);
 
 0.8 => gain_single_bongo.gain;
-0.4 => gain_triangle_long.gain;
-1.0 => gain_triangle_short.gain;
 0.2 => gain_print.gain;
 0.7 => gain_bass.gain;
 0.7 => gain_bass2.gain;
-0.7 => gain_gag.gain;
+0.5 => gain_hat.gain;
+0.5 => gain_clap.gain;
+0.7 => gain_bleep.gain;
 
 for (int i; i < N; i++) {
     adsr_bongo_high[i].set(5::ms, 0::ms, 1.0, 5::ms);
@@ -81,6 +80,8 @@ int padStateRaw[64];
 0 --> FREESTYLE (random hits)
 1 --> MELODIC (consistent hits, discretized rates based on frequency ratios)
 2 --> Back to freestyle
+3 --> OFF
+4 --> arpeggio bongo instrument
 */
 720.0 => float quarterIntervalMs;
 0.0 => float discretizedGt0;
@@ -107,10 +108,11 @@ fun bongoHighPanMix() {
 fun void setBongoIntervalFreestyle() {
     // Apply eased mapping. more "gt.axis[2]" --> less "sec"
     while (true) {
-        if (mode == 1) {
+        if (mode == 1 || mode == 3 || mode == 4) {
             10::ms => now;
             continue;
         }
+
         3.0 => float curve;
         1.0 - Math.pow(1.0 - gt.axis[2], curve) => float eased;
         (50/4) + (1800 * (1.0 - eased)) => float intervalMs;
@@ -125,6 +127,15 @@ fun void setBongoIntervalFreestyle() {
         }
         
         10::ms => now;
+    }
+}
+
+fun void playBongoBuild() {
+    getDiscretizedGt0(2) => discretizedGt0;
+    while (true) {
+        (gt.axis[1] + 1.0) / 2.0 * 10000.0 + 100.0 => lpf_bongo.freq;
+        gt.axis[2] => gain_bongo.gain;
+        120::ms => now;
     }
 }
 
@@ -169,12 +180,14 @@ fun void changeBongoHighEnvelope() {
 
 fun void pulseBongoHighEnvelope() {
     bongoEnv.keyOn();
+    0 => int i;
     while (true) {
         if (Math.max(0, discretizedGt0) > 0.1) {
             bongoEnv.keyOn();
             (20 + (1 - Math.max(0, discretizedGt0)) * 600)::ms => now; 
             bongoEnv.keyOff();
-
+            if (mode == 4) noteToBongoInterval(i % 3) / 2 => bongoInterval;
+            i + 2 => i;
             (40 + (1 - Math.max(0, discretizedGt0)) * 500)::ms => now; 
         } else {
             bongoEnv.keyOn();
@@ -234,76 +247,63 @@ fun void playBass() {
                 (quarterIntervalMs / 2)::ms => now;
                 spork ~ playBassOnce();
                 (quarterIntervalMs / 2)::ms => now;
-            } else if (padState[i] == 3) {
-                spork ~ playBassOnce();
-                (quarterIntervalMs / 6)::ms => now;
-                spork ~ playBassOnce();
-                (quarterIntervalMs / 6)::ms => now;
-                spork ~ playBassOnce();
-                (quarterIntervalMs / 6)::ms => now;
             }
         }
     }
 }
 
-fun playGagOnce() {
-  ((gt.axis[0] + 1.0) / 2.0) * 0.4 + 0.6 => buf_gag.rate;
-  Math.max(0, gt.axis[2] - 0.1) => gain_gag.gain;
-  8500 => buf_gag.pos;
+fun playClapOnce() {
+  0 => buf_clap.pos;
 }
 
-fun void playGag() {
+fun void playClap() {
     while (true) {
         for (32 => int i; i < 40; i++) {
             if (!padState[i]) {
                 quarterIntervalMs::ms => now;
             } else if (padState[i] == 1) {
-                spork ~ playGagOnce();
+                spork ~ playClapOnce();
                 quarterIntervalMs::ms => now;
             } else if (padState[i] == 2) {
-                spork ~ playGagOnce();
+                spork ~ playClapOnce();
                 (quarterIntervalMs / 2)::ms => now;
-                spork ~ playGagOnce();
+                spork ~ playClapOnce();
                 (quarterIntervalMs / 2)::ms => now;
             } else if (padState[i] == 3) {
-                spork ~ playGagOnce();
+                spork ~ playClapOnce();
                 (quarterIntervalMs / 3)::ms => now;
-                spork ~ playGagOnce();
+                spork ~ playClapOnce();
                 (quarterIntervalMs / 3)::ms => now;
-                spork ~ playGagOnce();
+                spork ~ playClapOnce();
                 (quarterIntervalMs / 3)::ms => now;
             }
         }
     }
 }
 
-fun playTriangleOnce() {
-    0 => buf_triangle_short.pos;
-    adsr_triangle_short.keyOn();
-    buf_triangle_short.samples()::samp - 5::ms => now;
-    adsr_triangle_short.keyOff();
-    5::ms => now;
+fun playHatOnce() {
+    0 => buf_hat.pos;
 }
 
-fun void playTriangle() {
+fun void playHat() {
     while (true) {
         for (40 => int i; i < 48; i++) {
             if (!padState[i]) {
                 quarterIntervalMs::ms => now;
             } else if (padState[i] == 1) {
-                spork ~ playTriangleOnce();
+                spork ~ playHatOnce();
                 quarterIntervalMs::ms => now;
             } else if (padState[i] == 2) {
-                spork ~ playTriangleOnce();
+                spork ~ playHatOnce();
                 (quarterIntervalMs / 2)::ms => now;
-                spork ~ playTriangleOnce();
+                spork ~ playHatOnce();
                 (quarterIntervalMs / 2)::ms => now;
             } else if (padState[i] == 3) {
-                spork ~ playTriangleOnce();
+                spork ~ playHatOnce();
                 (quarterIntervalMs / 3)::ms => now;
-                spork ~ playTriangleOnce();
+                spork ~ playHatOnce();
                 (quarterIntervalMs / 3)::ms => now;
-                spork ~ playTriangleOnce();
+                spork ~ playHatOnce();
                 (quarterIntervalMs / 3)::ms => now;
             }
         }
@@ -343,7 +343,7 @@ fun void runPad() {
             pad_msg.data2 => int pad;
             pad_msg.data3 => int velocity;
             // <<< inputType, pad, velocity >>>;
-            if (mode >= 1 && pad >= 0 && pad < 7 && inputType == NOTE_ON) {
+            if (mode == 1 && pad >= 0 && pad < 7 && inputType == NOTE_ON) {
                 // Play melody of bongo instrument using 8th row (bottom row)
                 1 => padState[pad];
                 for (int i; i < 5; i++) {
@@ -356,7 +356,7 @@ fun void runPad() {
                         mout.send(NOTE_ON, i, RED);
                     }
                 }
-            } else if (mode >= 1 && pad >= 8 && pad < 12) {
+            } else if (mode == 1 && pad >= 8 && pad < 12) {
                 // Play rhythm of bongo instrument using 7th row
                 pulseBongoHighEnvelopeSporkId.exit();
                 spork ~ pulseBongoHighEnvelope() @=> pulseBongoHighEnvelopeSporkId;
@@ -372,7 +372,7 @@ fun void runPad() {
                     }
                 }
             } else if (32 <= pad && pad < 40 && inputType == NOTE_ON) {
-                // gag
+                // clap
                 (padState[pad] + 1) % 4 => int nextState;
                 if (isShifted) 0 => nextState;
                 nextState => padState[pad];
@@ -387,7 +387,7 @@ fun void runPad() {
                     spork ~ flashButton(pad);
                 }
             } else if (40 <= pad && pad < 48 && inputType == NOTE_ON) {
-                // triangle
+                // hi hat
                 (padState[pad] + 1) % 4 => int nextState;
                 if (isShifted) 0 => nextState;
                 nextState => padState[pad];
@@ -412,7 +412,7 @@ fun void runPad() {
                 }
             } else if (pad >= 56 && pad < 64 && inputType == NOTE_ON) {
                 // Bass single rhythms
-                (padState[pad] + 1) % 4 => int nextState;
+                (padState[pad] + 1) % 3 => int nextState;
                 if (isShifted) 0 => nextState;
                 nextState => padState[pad];
 
@@ -425,10 +425,10 @@ fun void runPad() {
                 }
             } else if (pad == 89) {
                 if (inputType == NOTE_ON) {
-                    0.0 => bongoMuter.gain;
+                    0.0 => gain_bongo.gain;
                     mout.send(NOTE_ON, 89, RED);
                 } else if (inputType == NOTE_OFF) {
-                    1.0 => bongoMuter.gain;
+                    1.0 => gain_bongo.gain;
                     mout.send(NOTE_ON, 89, OFF);
                 }
             } else if (pad == 98) {
@@ -439,6 +439,8 @@ fun void runPad() {
                     0 => isShifted;
                     mout.send(NOTE_ON, 98, OFF);
                 }
+            } else if (pad == 86 && inputType == NOTE_ON) {
+                0 => buf_bleep.pos;
             }
         }
     }
@@ -467,6 +469,7 @@ class GameTrak
     float axis[6];
 }
 
+Shred slowBongoInstrumentId;
 fun void gametrak()
 {
     while( true )
@@ -506,11 +509,14 @@ fun void gametrak()
                     spork ~ prepMode1();
                     spork ~ playPrint();
                     spork ~ playBass();
-                    spork ~ playTriangle();
-                    spork ~ playGag();
+                    spork ~ playHat();
+                    spork ~ playClap();
 
                 } else if (mode == 1) {
-                    spork ~ slowBongoInstrument();
+                    spork ~ slowBongoInstrument() @=> slowBongoInstrumentId;
+                } else if (mode == 3) {
+                    slowBongoInstrumentId.exit();
+                    spork ~ playBongoBuild();
                 }
                 mode + 1 => mode;
                 
