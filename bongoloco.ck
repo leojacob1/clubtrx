@@ -1,12 +1,17 @@
-"224.0.0.1" => string hostname;
-7777 => int port;
+OscOut toNode, toChuck;
 
-OscOut xmit;
-xmit.dest( hostname, port );
+"127.0.0.1" => string host;
+7777 => int nodePort;
+8888 => int chuckPort;
+
+toNode.dest(host, nodePort);
+toChuck.dest(host, chuckPort);
 
 Gain bongoBusLeft => dac.left;
 Gain bongoBusRight => dac.right;
-Gain bongoBusCenter => Gain gain_bongo => ADSR bongoEnv => LPF lpf_bongo => JCRev rev_bongo => dac;
+Gain bongoBusCenter => Gain gain_bongo => ADSR bongoEnv => Gain gain_monitor_bongo => LPF lpf_bongo => JCRev rev_bongo => Pan2 pan_bongo_instrument => dac;
+
+0.7 => float GAIN_BONGO => gain_bongo.gain;
 
 10000 => lpf_bongo.freq;
 0.0 => rev_bongo.mix;
@@ -23,15 +28,14 @@ GameTrak gt;
 "bleep.wav" => string bleep_path;
 "printingpress.wav" => string printing_path;
 "progbass3.wav" => string bass_path;
-"progbass4.wav" => string bass2_path;
+// "progbass4.wav" => string bass2_path;
 
 // Sndbufs for rhythmic elements in second part
-SndBuf buf_single_bongo => ADSR adsr_single_bongo => Gain gain_single_bongo => dac;
 SndBuf buf_print => Gain gain_print => Pan2 pan_print => dac;
-SndBuf buf_bass => Gain gain_bass => dac;
-SndBuf buf_bass2 => Gain gain_bass2 => dac;
-SndBuf buf_hat => Gain gain_hat => dac;
-SndBuf buf_clap => Gain gain_clap => dac;
+SndBuf buf_bass => Gain gain_monitor_bass => Gain gain_bass => dac;
+// SndBuf buf_bass2 => gain_monitor_bass => Gain gain_bass2 => dac;
+SndBuf buf_hat => Gain gain_monitor_hat => Gain gain_hat => dac;
+SndBuf buf_clap => Gain gain_monitor_clap => Gain gain_clap => dac;
 SndBuf buf_bleep => JCRev rev_bleep => Gain gain_bleep => dac;
 
 0.05 => rev_bleep.mix;
@@ -42,30 +46,25 @@ Pan2 pans_bongo_high[N];
 
 // Connect each buffer to a pan and to dac
 // Need panned buses and a center bus that can handle envelope
-"sounds/" + kenkeni_path => buf_single_bongo.read;
 "sounds/" + printing_path => buf_print.read;
 "sounds/" + bass_path => buf_bass.read;
-"sounds/" + bass2_path => buf_bass2.read;
+// "sounds/" + bass2_path => buf_bass2.read;
 "sounds/" + hat_path => buf_hat.read;
 "sounds/" + clap_path => buf_clap.read;
 "sounds/" + bleep_path => buf_bleep.read;
 
-buf_single_bongo.samples() => buf_single_bongo.pos;
 buf_print.samples() => buf_print.pos;
 buf_bass.samples() => buf_bass.pos;
-buf_bass2.samples() => buf_bass2.pos;
+// buf_bass2.samples() => buf_bass2.pos;
 buf_hat.samples() => buf_hat.pos;
 buf_clap.samples() => buf_clap.pos;
 buf_bleep.samples() => buf_bleep.pos;
 
-adsr_single_bongo.set(5::ms, 0::ms, 1.0, 5::ms);
-
-0.8 => gain_single_bongo.gain;
 0.2 => gain_print.gain;
-0.7 => gain_bass.gain;
-0.7 => gain_bass2.gain;
-0.5 => gain_hat.gain;
-0.5 => gain_clap.gain;
+0.35 => gain_bass.gain;
+// 0.7 => gain_bass2.gain;
+0.3 => gain_hat.gain;
+0.7 => gain_clap.gain;
 0.7 => gain_bleep.gain;
 
 for (int i; i < N; i++) {
@@ -114,7 +113,7 @@ fun bongoHighPanMix() {
 fun void setBongoIntervalFreestyle() {
     // Apply eased mapping. more "gt.axis[2]" --> less "sec"
     while (true) {
-        if (mode == 1 || mode == 3 || mode == 4) {
+        if (mode == 1 || mode >= 3) {
             10::ms => now;
             continue;
         }
@@ -138,10 +137,11 @@ fun void setBongoIntervalFreestyle() {
 
 fun void playBongoBuild() {
     getDiscretizedGt0(2) => discretizedGt0;
+    1.0 => GAIN_BONGO => gain_bongo.gain;
     while (true) {
         (gt.axis[1] + 1.0) / 2.0 * 10000.0 + 100.0 => lpf_bongo.freq;
         gt.axis[2] => gain_bongo.gain;
-        120::ms => now;
+        150::ms => now;
     }
 }
 
@@ -152,10 +152,10 @@ fun void playHits() {
             10::ms => now;
             continue;
         } else if (!mode) {
-            Std.rand2f(0.2, 0.7) => bufs_bongo_high[current].gain;
+            Std.rand2f(0.4, 0.9) => bufs_bongo_high[current].gain;
             Std.rand2f(-1.0 * (1 - Math.pow(gt.axis[2], 3)), 1.0 * (1 - Math.pow(gt.axis[2], 3))) => pans_bongo_high[current].pan;
         } else if (mode >= 1) {
-            0.5 => bufs_bongo_high[current].gain;
+            1.1 => bufs_bongo_high[current].gain;
         }
         spork ~ triggerSound(bufs_bongo_high[current], current);
         (1 + current) % N => current;
@@ -166,6 +166,9 @@ fun void playHits() {
 fun void triggerSound(SndBuf buf, int c) {
     buf.pos(1500);
     adsr_bongo_high[c].keyOn();
+    toNode.start( "/bongo" );
+    1 => toNode.add;
+    toNode.send();
     12000::samp => now;
     adsr_bongo_high[c].keyOff();
     buf.pos((buf.length() / samp) $ int);
@@ -183,19 +186,43 @@ fun void changeBongoHighEnvelope() {
   }
 }
 
+0 => int isBongoEnvPulsing;
+fun void graphicBongo() {
+    while (true) {
+        if (isBongoEnvPulsing) {
+            toNode.start( "/bongoEnvParams" );
+            (bongoEnv.attackTime() / ms) => toNode.add;
+            (bongoEnv.decayTime() / ms) + (bongoEnv.releaseTime() / ms) => toNode.add;
+            toNode.send();
+        }
+        10::ms => now;
+    }
+}
 
 fun void pulseBongoHighEnvelope() {
+    spork ~ graphicBongo();
     bongoEnv.keyOn();
     0 => int i;
     while (true) {
         if (Math.max(0, discretizedGt0) > 0.1) {
+            1 => isBongoEnvPulsing;
+            toNode.start( "/bongoEnvOn" );
+            isBongoEnvPulsing => toNode.add;
+            toNode.send();
             bongoEnv.keyOn();
             (20 + (1 - Math.max(0, discretizedGt0)) * 600)::ms => now; 
             bongoEnv.keyOff();
-            if (mode == 4) noteToBongoInterval(i % 3) / 2 => bongoInterval;
-            i + 2 => i;
+            if (mode >= 4) {
+                noteToBongoInterval(i % 3) / 2 => bongoInterval;
+                (i % 9) / 9.0 * 2.0 - 1.0 => pan_bongo_instrument.pan;
+                i + 2 => i;
+            }
             (40 + (1 - Math.max(0, discretizedGt0)) * 500)::ms => now; 
         } else {
+            0 => isBongoEnvPulsing;
+            toNode.start( "/bongoEnvOn" );
+            isBongoEnvPulsing => toNode.add;
+            toNode.send();
             bongoEnv.keyOn();
             10::ms => now;
         }
@@ -242,6 +269,7 @@ fun playBassOnce() {
 }
 
 fun void playBass() {
+    spork ~ graphicBass();
     while (true) {
         for (56 => int i; i < 64; i++) {
             if (!padState[i]) {
@@ -258,11 +286,51 @@ fun void playBass() {
     }
 }
 
+fun void graphicBass() {
+    while (true) {
+        toNode.start( "/bassGain" );
+        gain_monitor_bass.last() => float bassGain;
+        
+        Math.pow(Math.min(0.5, Math.fabs(bassGain)), 3) => bassGain;
+        if (bassGain < 0.0000001) {
+            0 => bassGain;
+        } else if (bassGain < 0.1) {
+            0.006 => bassGain;
+        }
+        bassGain * 200 => toNode.add;
+        toNode.send();
+        10::ms => now;
+    }
+}
+
+fun void graphicHat() {
+    while (true) {
+        toNode.start( "/hatGain" );
+        gain_monitor_hat.last() => float hatGain;
+        Math.fabs(hatGain) * 700 => hatGain;
+        hatGain => toNode.add;
+        toNode.send();
+        10::ms => now;
+    }
+}
+
+fun void graphicClap() {
+    while (true) {
+        toNode.start( "/clapGain" );
+        gain_monitor_clap.last() => float clapGain;
+        Math.fabs(clapGain) * 700 => clapGain;
+        clapGain => toNode.add;
+        toNode.send();
+        10::ms => now;
+    }
+}
+
 fun playClapOnce() {
   0 => buf_clap.pos;
 }
 
 fun void playClap() {
+    spork ~ graphicClap();
     while (true) {
         for (32 => int i; i < 40; i++) {
             if (!padState[i]) {
@@ -292,6 +360,7 @@ fun playHatOnce() {
 }
 
 fun void playHat() {
+    spork ~ graphicHat();
     while (true) {
         for (40 => int i; i < 48; i++) {
             if (!padState[i]) {
@@ -300,17 +369,25 @@ fun void playHat() {
                 spork ~ playHatOnce();
                 quarterIntervalMs::ms => now;
             } else if (padState[i] == 2) {
+                0.8 => gain_hat.gain;
                 spork ~ playHatOnce();
                 (quarterIntervalMs / 2)::ms => now;
+                0.6 => gain_hat.gain;
                 spork ~ playHatOnce();
                 (quarterIntervalMs / 2)::ms => now;
             } else if (padState[i] == 3) {
+                0.85 => gain_hat.gain;
                 spork ~ playHatOnce();
-                (quarterIntervalMs / 3)::ms => now;
+                (quarterIntervalMs / 4)::ms => now;
+                0.6 => gain_hat.gain;
                 spork ~ playHatOnce();
-                (quarterIntervalMs / 3)::ms => now;
+                (quarterIntervalMs / 4)::ms => now;
+                0.75 => gain_hat.gain;
                 spork ~ playHatOnce();
-                (quarterIntervalMs / 3)::ms => now;
+                (quarterIntervalMs / 4)::ms => now;
+                0.5 => gain_hat.gain;
+                spork ~ playHatOnce();
+                (quarterIntervalMs / 4)::ms => now;
             }
         }
     }
@@ -352,7 +429,7 @@ fun void runPad() {
             if (mode == 1 && pad >= 0 && pad < 7 && inputType == NOTE_ON) {
                 // Play melody of bongo instrument using 8th row (bottom row)
                 1 => padState[pad];
-                for (int i; i < 5; i++) {
+                for (int i; i < 7; i++) {
                     if (i == pad) {
                         1 => padState[pad];
                         mout.send(NOTE_ON, pad, GREEN);
@@ -434,7 +511,7 @@ fun void runPad() {
                     0.0 => gain_bongo.gain;
                     mout.send(NOTE_ON, 89, RED);
                 } else if (inputType == NOTE_OFF) {
-                    1.0 => gain_bongo.gain;
+                    GAIN_BONGO => gain_bongo.gain;
                     mout.send(NOTE_ON, 89, OFF);
                 }
             } else if (pad == 98) {
@@ -523,9 +600,9 @@ fun void gametrak()
                 } else if (mode == 2) {
                     0.0 => gain_bongo.gain;
                 } else if (mode == 3) {
-                    xmit.start( "/mode" );
-                    1 => xmit.add;
-                    xmit.send();
+                    toChuck.start( "/mode" );
+                    1 => toChuck.add;
+                    toChuck.send();
                     slowBongoInstrumentId.exit();
                     spork ~ playBongoBuild();
                 }
@@ -564,12 +641,16 @@ fun float getDiscretizedGt0(int i) {
 
 fun dur noteToBongoInterval(int i) {
     if (i == 1) {
-        return (5.0 / 6.0) * bongoIntervalBase; // (minor third)
+        return (8.0 / 9.0) * bongoIntervalBase; // (second)
     } else if (i == 2) {
-        return (2.0 / 3.0) * bongoIntervalBase; //  (perfect fifth)
+        return (5.0 / 6.0) * bongoIntervalBase; // (minor third)
     } else if (i == 3) {
-        return (5.0 / 8.0) * bongoIntervalBase; //  (minor sixth)
+        return (3.0 / 4.0) * bongoIntervalBase; //  (perfect fifth)
     } else if (i == 4) {
+        return (2.0 / 3.0) * bongoIntervalBase; //  (perfect fifth)
+    } else if (i == 5) {
+        return (5.0 / 8.0) * bongoIntervalBase; //  (minor sixth)
+    } else if (i == 6) {
         return (1.0 / 2.0) * bongoIntervalBase; //  (octave)
     }
     return bongoIntervalBase; // (root)
@@ -581,12 +662,12 @@ fun void prepMode1() {
     ((20 + (1 - Math.max(0, discretizedGt0)) * 600) + (40 + (1 - Math.max(0, discretizedGt0)) * 500)) * 2 => quarterIntervalMs; 
     bongoInterval => bongoIntervalBase;
     <<< "Sending /key ", bongoIntervalBase, (1000.0)::ms / bongoIntervalBase >>>;
-    xmit.start( "/key" );
-    (1000.0)::ms / bongoIntervalBase => xmit.add;
-    xmit.send();
+    toChuck.start( "/key" );
+    (1000.0)::ms / bongoIntervalBase => toChuck.add;
+    toChuck.send();
 
     mout.send(NOTE_ON, 0, GREEN);
-    for (1 => int i; i < 5; i++) {
+    for (1 => int i; i < 7; i++) {
         mout.send(NOTE_ON, i, RED);
     }
     mout.send(NOTE_ON, 8, GREEN);

@@ -1,7 +1,5 @@
 0 => int currentChordIndex;
 4 => int NUM_CHORD_VOICES;
-// overall volume
-1 => float MAIN_VOLUME;
 // grain duration base
 50::ms => dur GRAIN_LENGTH;
 // factor relating grain duration to ramp up/down time
@@ -42,16 +40,19 @@ LiSa lisaBass[soundfiles.bass.size()];
 for (int i; i < soundfiles.bass.size(); i++) {
     load(soundfiles.bass[i]) @=> lisaBass[i];
     lisaBass[i].chan(0) => g;
+    1.5 => lisaBass[i].gain;
     <<<soundfiles.bass[i], "lisa loaded" >>>;
 }
 
 
-int chords[4][4];
+int chords[6][2];
 
-[0, 3, 7, 10] @=> chords[0];
-[5, 8, 0, 3] @=> chords[1];
-[10, 2, 5, 9] @=> chords[2];
-[3, 7, 10, 3] @=> chords[3];
+[10, 0] @=> chords[0];
+[10, 11] @=> chords[1];
+[3, 0] @=> chords[2];
+[3, 11] @=> chords[3];
+[0, 0] @=> chords[4];
+[0, 11] @=> chords[5];
 
 0.0 => float keyHz;
 0 => int closestKeyIndex;
@@ -60,7 +61,7 @@ fun void listenKey()
 {
     OscIn oin;
     OscMsg msg;
-    7777 => oin.port;
+    8888 => oin.port;
     oin.addAddress( "/key, f" );
     while ( true )
         {
@@ -82,7 +83,7 @@ fun void listenKey()
 fun void listenMode() {
     OscIn oin;
     OscMsg msg;
-    7777 => oin.port;
+    8888 => oin.port;
     oin.addAddress( "/mode, i" );
     while ( true )
         {
@@ -202,7 +203,7 @@ fun void gametrak()
             else if( msg.isButtonDown())
             {                
                 <<< "button", msg.which, "down" >>>;
-                (currentChordIndex + 1) % 4 => currentChordIndex;
+                (currentChordIndex + 1) % 6 => currentChordIndex;
             }
             
             // joystick button up
@@ -273,8 +274,8 @@ fun void main()
     {
         fireGrain(lisaBass[(closestKeyIndex + chords[currentChordIndex][0]) % 12]);
         fireGrain(lisas[(closestKeyIndex + chords[currentChordIndex][1]) % 12]); 
-        fireGrain(lisas[(closestKeyIndex + chords[currentChordIndex][2]) % 12]); 
-        fireGrain(lisas[(closestKeyIndex + chords[currentChordIndex][3]) % 12]);
+        // fireGrain(lisas[(closestKeyIndex + chords[currentChordIndex][2]) % 12]); 
+        // fireGrain(lisas[(closestKeyIndex + chords[currentChordIndex][3]) % 12]);
 
         // amount here naturally controls amount of overlap between grains
         (GRAIN_LENGTH / 2 + Math.random2f(0,GRAIN_FIRE_RANDOM)::ms)/2 => now;
@@ -388,7 +389,7 @@ fun float getTargetHzInOctave(float targetHz) {
     0 => int isRightOctave;
     while (!isRightOctave) {
         if (targetHz < soundfiles.bassHz[0]) {
-            <<< "too low!, bumping up" >>>;
+            <<< targetHz, "too low!, bumping up" >>>;
             2 * targetHz => targetHz;
         } else if (targetHz > soundfiles.bassHz[0] * 2) {
             <<< "too high! dropping down" >>>;
