@@ -1,3 +1,10 @@
+OscOut toNode;
+
+"127.0.0.1" => string host;
+7777 => int nodePort;
+
+toNode.dest(host, nodePort);
+
 0 => int currentChordIndex;
 4 => int NUM_CHORD_VOICES;
 // grain duration base
@@ -259,9 +266,13 @@ fun void trackSynthParams()
         // <<< rightJoyStickXYInput, gt.axis[4] >>>;
         250 * Math.pow(gt.axis[4], 2) + 500 * gt.axis[4] + 250 => float lengthInput;
         mapAxis2Range(lengthInput, 1.0, 1000.0, 1.0, 1000.0)::ms => GRAIN_LENGTH; // TODO: make this diff scale
+        toNode.start( "/granular" );
+        g.gain() => toNode.add;
+        GRAIN_POSITION => toNode.add;
+        GRAIN_LENGTH / ms => toNode.add;
+        toNode.send();
 
-
-        20::ms => now;
+        40::ms => now;
     }
 }
 
