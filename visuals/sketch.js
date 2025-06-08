@@ -159,7 +159,7 @@ function draw() {
     textSize(128);
     fill(255);
     textAlign(CENTER, CENTER);
-    text(`Act ${mode === 0 ? 'I' : 'II'}`, width / 2, (1 - textHeight) * height + 128);
+    text(`Act ${mode === 0 ? 'I' : 'II'}`, width / 2, (1 - textHeight) * height + 200);
   }
 
   // ======= BASS (CIRCLE) =======

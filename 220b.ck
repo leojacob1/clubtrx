@@ -589,29 +589,6 @@ fun void graphicPots() {
     toNode.send();
     10::ms => now;
   }
-    //     -1.2 => float baseY;
-    //     -4.0 + activePotId * 1.2 => float baseX;
-
-    //     gainPots.last() => intensity;
-    //     if (activePotId < 0) {
-    //       cubePots.sca(@(0.0, 0.0, 0.0));
-    //       0.0 => intensity;
-    //     } else {
-    //       cubePots.sca(@(1.0, 1.0, 1.0));
-    //     }
-
-    //     // Random offset in X and Y (Z optional)
-    //     Math.random2f(-intensity, intensity) => float offsetX;
-    //     Math.random2f(-intensity, intensity) => float offsetY;
-
-    //     // Apply offset to original position
-    //     cubePots.posX(baseX + offsetX);
-    //     cubePots.posY(baseY + offsetY);
-
-
-    //     // Wait a small amount of time before next jitter
-    //     5::ms => now;
-    // }
 }
 
 fun void graphicFadi() {
@@ -625,4 +602,9 @@ fun void graphicFadi() {
   }
 }
 
-eon => now;
+while (mode < 22) {
+    100::ms => now;
+}
+
+<<< "GOODBYE WORLD" >>>;
+me.exit();

@@ -21,11 +21,11 @@ toNode.dest(host, nodePort);
 1 => float GRAIN_FIRE_RANDOM;
 
 // max lisa voices
-40 => int LISA_MAX_VOICES;
+30 => int LISA_MAX_VOICES;
 
 0 => int mode;
 
-Shred gametrakSh;
+Shred listenGtSh;
 Shred trackSynthParamsSh;
 Shred mainSh;
 
@@ -101,16 +101,32 @@ fun void listenMode() {
         while ( oin.recv( msg ) )
         {
             msg.getInt(0) => mode;
-            if (mode == 22 || mode == 77) {
-                spork ~ gametrak() @=> gametrakSh;
-                spork ~ trackSynthParams() @=> trackSynthParamsSh;
-                spork ~ main() @=> mainSh;
-            } else {
-                gametrakSh.exit();
-                trackSynthParamsSh.exit();
-                mainSh.exit();
-            }
+            // if (mode == 22 || mode == 77) {
+            //     spork ~ listenGt() @=> listenGtSh;
+            //     spork ~ trackSynthParams() @=> trackSynthParamsSh;
+            //     spork ~ main() @=> mainSh;
+            // } else {
+            //     Machine.remove(listenGtSh.id());
+            //     Machine.remove(trackSynthParamsSh.id());
+            //     Machine.remove(mainSh.id());
+            // }
+            <<< "mode", mode >>>;
+        }
+    }
+}
 
+float gt[6];
+fun void listenGt() {
+    OscIn oin;
+    OscMsg msg;
+    8888 => oin.port;
+    oin.addAddress("/gt, i f");
+    while (true) {
+        oin => now;
+        while (oin.recv(msg)) {
+            msg.getInt(0) => int axis;
+            msg.getFloat(1) => float value;
+            value => gt[axis];
         }
     }
 }
@@ -120,112 +136,7 @@ fun void listenMode() {
 // pole location to block DC and ultra low frequencies
 .99 => blocker.blockZero;
 
-
-//  -------------------------------Keyboard and GameTrak setup -------------------------------
-Hid hi;
-HidMsg msg;
-
-// which joystick
-0 => int device;
-// get from command line
-if( me.args() >= 4 ) me.arg(3) => Std.atoi => device;
-
-// open joystick 0, exit on fail
-if( !hi.openKeyboard( device ) ) me.exit();
-// log
-<<< "keyboard '" + hi.name() + "' ready", "" >>>;
-
-
-0 => int DEADZONE;
-0 => int GAME_TRAK_DEVICE;
-Hid trak;
-HidMsg msgTrak;
-
-if( !trak.openJoystick( GAME_TRAK_DEVICE ) ) me.exit();
-<<< "joystick '" + trak.name() + "' ready", "" >>>;
-
-// keycodes (for MacOS; may need to change for other systems)
-45 => int KEY_DASH;
-46 => int KEY_EQUAL;
-54 => int KEY_COMMA;
-55 => int KEY_PERIOD;
-79 => int KEY_RIGHT;
-80 => int KEY_LEFT;
-81 => int KEY_DOWN;
-82 => int KEY_UP;
-
-// spork it
-
-class GameTrak
-{
-    // timestamps
-    time lastTime;
-    time currTime;
-    
-    // previous axis data
-    float lastAxis[6];
-    // current axis data
-    float axis[6];
-}
-
-// gametrack
-GameTrak gt;
-
-// gametrack handling
-fun void gametrak()
-{
-    while( true )
-    {
-        // wait on HidIn as event
-        trak => now;
-        
-        // messages received
-        while( trak.recv( msg ) )
-        {
-            // joystick axis motion
-            if( msg.isAxisMotion() )
-            {            
-                // check which
-                if( msg.which >= 0 && msg.which < 6 )
-                {
-                    // check if fresh
-                    if( now > gt.currTime )
-                    {
-                        // time stamp
-                        gt.currTime => gt.lastTime;
-                        // set
-                        now => gt.currTime;
-                    }
-                    // save last
-                    gt.axis[msg.which] => gt.lastAxis[msg.which];
-                    // the z axes map to [0,1], others map to [-1,1]
-                    if( msg.which != 2 && msg.which != 5 )
-                    { msg.axisPosition => gt.axis[msg.which]; }
-                    else
-                    {
-                        1 - ((msg.axisPosition + 1) / 2) - DEADZONE => gt.axis[msg.which];
-                        if( gt.axis[msg.which] < 0 ) 0 => gt.axis[msg.which];
-                    }
-                }
-            }
-            
-            // joystick button down
-            else if( msg.isButtonDown())
-            {                
-                <<< "button", msg.which, "down" >>>;
-                (currentChordIndex + 1) % 6 => currentChordIndex;
-            }
-            
-            // joystick button up
-            else if( msg.isButtonUp() )
-            {
-                <<< "button", msg.which, "up" >>>;
-            }
-        }
-    }
-}
-
-spork ~ gametrak() @=> gametrakSh;
+spork ~ listenGt() @=> listenGtSh;
 spork ~ trackSynthParams() @=> trackSynthParamsSh;
 spork ~ main() @=> mainSh;
 
@@ -267,11 +178,15 @@ fun void trackSynthParams()
 {
     while (true)
     {
-        mapAxis2Range(gt.axis[2], 0.1, 0.5, 0.0, 1.0) => g.gain;
-        mapAxis2Range(-gt.axis[5], -0.5, 0.0, 0.01, 0.2) => GRAIN_POSITION;
+        if (mode != 0 && mode != 22 && mode != 77) {
+            100::ms => now;
+            continue;
+        }
+        mapAxis2Range(gt[2], 0.1, 0.5, 0.0, 1.0) => g.gain;
+        mapAxis2Range(-gt[5], -0.5, 0.0, 0.01, 0.2) => GRAIN_POSITION;
         // Math.sqrt(Math.pow(gt.axis[4], 1.5) + Math.pow(gt.axis[3], 1.5)) => float rightJoyStickXYInput;
         // <<< rightJoyStickXYInput, gt.axis[4] >>>;
-        250 * Math.pow(gt.axis[4], 2) + 500 * gt.axis[4] + 250 => float lengthInput;
+        250 * Math.pow(gt[4], 2) + 500 * gt[4] + 250 => float lengthInput;
         mapAxis2Range(lengthInput, 1.0, 1000.0, 1.0, 1000.0)::ms => GRAIN_LENGTH; // TODO: make this diff scale
         toNode.start( "/granular" );
         g.gain() => toNode.add;
@@ -290,6 +205,10 @@ fun void main()
 {
     while( true )
     {
+        if (mode != 0 && mode != 22 && mode != 77) {
+            100::ms => now;
+            continue;
+        }
         fireGrain(lisaBass[(closestKeyIndex + chords[currentChordIndex][0]) % 12]);
         fireGrain(lisas[(closestKeyIndex + chords[currentChordIndex][1]) % 12]); 
         // fireGrain(lisas[(closestKeyIndex + chords[currentChordIndex][2]) % 12]); 
@@ -313,8 +232,7 @@ fun void fireGrain(LiSa lisa)
     // a grain
     if( lisa != null && pos >= 0 )
     {
-        spork ~ grain( lisa, pos * lisa.duration(), grainLen, rampTime, rampTime, 
-        GRAIN_PLAY_RATE );
+        spork ~ grain( lisa, pos * lisa.duration(), grainLen, rampTime, rampTime, GRAIN_PLAY_RATE );
     }
 }
 

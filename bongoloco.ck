@@ -98,19 +98,18 @@ int padStateRaw[64];
 
 // Balance gains between panned buses and center bus (center bus takes over afte mode 0)
 fun bongoHighPanMix() {
-  while (true) {
-    if (mode != 33) {
-        0.0 => bongoBusLeft.gain;
-        0.0 => bongoBusRight.gain;
-        1.0 => bongoBusCenter.gain;
-    } else {
-        Math.max(0, 1 - (gt.axis[2] / 0.8)) => bongoBusLeft.gain;
-        Math.max(0, 1 - (gt.axis[2] / 0.8)) => bongoBusRight.gain;
-        gt.axis[2] / 0.8 => bongoBusCenter.gain; 
-    }
-    
-    10::ms => now;
-  }
+    while (mode < 44) {
+        if (mode == 33) {
+            Math.max(0, 1 - (gt.axis[2] / 0.8)) => bongoBusLeft.gain;
+            Math.max(0, 1 - (gt.axis[2] / 0.8)) => bongoBusRight.gain;
+            gt.axis[2] / 0.8 => bongoBusCenter.gain; 
+        }
+            
+        10::ms => now;
+    } 
+    0.0 => bongoBusLeft.gain;
+    0.0 => bongoBusRight.gain;
+    1.0 => bongoBusCenter.gain;
 }
 
 fun void setBongoIntervalFreestyle() {
@@ -190,20 +189,20 @@ fun void changeBongoHighEnvelope() {
 }
 
 0 => int isBongoEnvPulsing;
-fun void graphicBongo() {
-    while (true) {
-        if (isBongoEnvPulsing) {
-            // toNode.start( "/bongoEnvParams" );
-            // (bongoEnv.attackTime() / ms) => toNode.add;
-            // (bongoEnv.decayTime() / ms) + (bongoEnv.releaseTime() / ms) => toNode.add;
-            // toNode.send();
-        }
-        10::ms => now;
-    }
-}
+// fun void graphicBongo() {
+//     while (true) {
+//         if (isBongoEnvPulsing) {
+//             // toNode.start( "/bongoEnvParams" );
+//             // (bongoEnv.attackTime() / ms) => toNode.add;
+//             // (bongoEnv.decayTime() / ms) + (bongoEnv.releaseTime() / ms) => toNode.add;
+//             // toNode.send();
+//         }
+//         10::ms => now;
+//     }
+// }
 
 fun void pulseBongoHighEnvelope() {
-    spork ~ graphicBongo();
+    // spork ~ graphicBongo();
     bongoEnv.keyOn();
     0 => int i;
     while (true) {
@@ -407,9 +406,8 @@ MidiMsg pad_msg;
 
 0 => int isShifted; // is shift currently pressed
 
-Shred pulseBongoHighEnvelopeSporkId;
+Shred pulseBongoHighEnvelopeSpork;
 fun void runPad() {
-    <<< "running pad bongo" >>>;
     while (true) {
         min => now;
         while (min.recv(pad_msg)) {
@@ -432,8 +430,8 @@ fun void runPad() {
                 }
             } else if (mode == 44 && pad >= 8 && pad < 12) {
                 // Play rhythm of bongo instrument using 7th row
-                pulseBongoHighEnvelopeSporkId.exit();
-                spork ~ pulseBongoHighEnvelope() @=> pulseBongoHighEnvelopeSporkId;
+                Machine.remove(pulseBongoHighEnvelopeSpork.id());
+                spork ~ pulseBongoHighEnvelope() @=> pulseBongoHighEnvelopeSpork;
                 getDiscretizedGt0(pad - 8) => discretizedGt0;
                 1 => padState[pad];
                 for (8 => int i; i < 12; i++) {
@@ -554,7 +552,7 @@ class GameTrak
     float axis[6];
 }
 
-Shred slowBongoInstrumentId;
+Shred slowBongoInstrumentSh;
 fun void gametrak()
 {
     while( true )
@@ -583,6 +581,10 @@ fun void gametrak()
                         Math.min(0.78, (1 - ((msg.axisPosition + 1) / 2) - DEADZONE) / 0.78) / 0.78=> gt.axis[msg.which];
                         if( gt.axis[msg.which] < 0 ) 0 => gt.axis[msg.which];
                     }
+                    toChuck.start( "/gt" );
+                    msg.which => toChuck.add;
+                    gt.axis[msg.which] => toChuck.add;
+                    toChuck.send();
                 }
             }
             
@@ -604,7 +606,7 @@ fun void gametrak()
 
                     spork ~ playHits();
 
-                    spork ~ pulseBongoHighEnvelope() @=> pulseBongoHighEnvelopeSporkId;
+                    spork ~ pulseBongoHighEnvelope() @=> pulseBongoHighEnvelopeSpork;
 
                     spork ~ changeBongoHighEnvelope();
                 } else if (mode == 33) {
@@ -615,11 +617,11 @@ fun void gametrak()
                     spork ~ playClap();
 
                 } else if (mode == 44) {
-                    spork ~ slowBongoInstrument() @=> slowBongoInstrumentId;
+                    spork ~ slowBongoInstrument() @=> slowBongoInstrumentSh;
                 } else if (mode == 55) {
                     0.0 => gain_bongo.gain;
                 } else if (mode == 66) {
-                    slowBongoInstrumentId.exit();
+                    Machine.remove(slowBongoInstrumentSh.id());
                     spork ~ playBongoBuild();
                 }
                 mode + 11 => mode;
