@@ -21,7 +21,7 @@ toNode.dest(host, nodePort);
 1 => float GRAIN_FIRE_RANDOM;
 
 // max lisa voices
-30 => int LISA_MAX_VOICES;
+40 => int LISA_MAX_VOICES;
 
 0 => int mode;
 

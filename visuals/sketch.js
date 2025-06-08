@@ -152,6 +152,16 @@ function draw() {
     }
   }
 
+  // ======= Title text =======
+
+  if (mode == 0 || mode == 22) {
+    textFont('Times New Roman');
+    textSize(128);
+    fill(255);
+    textAlign(CENTER, CENTER);
+    text(`Act ${mode === 0 ? 'I' : 'II'}`, width / 2, (1 - textHeight) * height + 128);
+  }
+
   // ======= BASS (CIRCLE) =======
   let bassOffsetX = random(-bassGain, bassGain);
   let bassOffsetY = random(-bassGain, bassGain);
@@ -200,13 +210,6 @@ function draw() {
     squareBaseY = (clapNewY + squareBaseY) / 2;
     fill(clapRectangleColor);
     rect(clapNewX, clapNewY, 120, 120);
-  }
-  if (mode == 0 || mode == 22) {
-    textFont('Times New Roman');
-    textSize(128);
-    fill(255);
-    textAlign(CENTER, CENTER);
-    text(`Act ${mode === 0 ? 'I' : 'II'}`, width / 2, (1 - textHeight) * height + 128);
   }
 
   frameCounter++;
