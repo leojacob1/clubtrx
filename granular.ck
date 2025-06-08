@@ -98,7 +98,7 @@ fun void listenMode() {
 
         while ( oin.recv( msg ) )
         {
-            if (msg.getInt(0) == 1) {
+            if (msg.getInt(0) == 4) {
                 spork ~ gametrak() @=> gametrakSh;
                 spork ~ trackSynthParams() @=> trackSynthParamsSh;
                 spork ~ main() @=> mainSh;

@@ -1,20 +1,23 @@
 // 🎛 Unified p5.js Sketch: Combines animated bass/hat/clap shapes with background static texture
-
+let mode = -1;
 let bassGain = 0;
 let hatGain = 0;
 let clapGain = 0;
+let potGain = 0;
+let isPotsOn = 0;
+let activePotId = -1;
 let bongoEnvIsRunning = false;
 let bongoEnvelopeTime = 0;
 let bongoAttackMs = 0.0;
 let bongoDecayReleaseMs = 0.0;
 let bassBaseX, bassBaseY;
 let hatBaseX, hatBaseY;
-let clapBaseX, clapBaseY;
+let squareBaseX, squareBaseY;
 let bassCircleColor;
 let hatTriangleColor;
 let clapRectangleColor;
 let bongoAlpha = 255;
-let staticAlpha = 0
+let staticAlpha = 0;
 
 let grainGain;
 let grainPos;
@@ -27,12 +30,12 @@ let bigRadius = 130;
 let staticSquares = [];
 let cols, rows;
 let staticSize = 8;
-let staticFlashRate = 10;
+let staticFlashRate = 3;
 let frameCounter = 0;
 let staticColors;
 
 function setup() {
-  frameRate(30);
+  frameRate(24);
   createCanvas(windowWidth, windowHeight);
   rectMode(CENTER);
   noStroke();
@@ -40,10 +43,10 @@ function setup() {
   // Initialize positions
   bassBaseX = width / 2;
   bassBaseY = height / 2;
-  hatBaseX = width / 3;
-  hatBaseY = height / 3 * 2;
-  clapBaseX = width / 3 * 2;
-  clapBaseY = height / 5;
+  hatBaseX = 3 * width / 5;
+  hatBaseY = height / 3.5;
+  squareBaseX = width / 8;
+  squareBaseY = height / 3;
 
   grainGain = 0;
   grainPos = 0;
@@ -58,15 +61,15 @@ function setup() {
 
   // Static palette
   staticColors = [
-    color(241, 9, 210),
-    color(100, 90, 99),
+    // color(241, 9, 210),
+    // color(100, 90, 99),
     // color(127, 85, 107),
     // color(82, 96, 81),
     // color(199, 133, 209),
     // color(138, 196, 155),
     color(239, 236, 243),
-    color(16, 228, 208),
-    color(254, 240, 49)
+    // color(16, 228, 208),
+    // color(254, 240, 49)
   ];
 
   cols = ceil(width / staticSize);
@@ -76,25 +79,44 @@ function setup() {
   let socket = new WebSocket("ws://localhost:8081");
   socket.onmessage = function (event) {
     let msg = JSON.parse(event.data);
-    if (msg.address === "/bassGain") bassGain = msg.args[0];
+    if (msg.address === "/mode") mode = msg.args[0]
+    else if (msg.address === "/bassGain") bassGain = msg.args[0];
     else if (msg.address === "/hatGain") hatGain = msg.args[0];
     else if (msg.address === "/clapGain") clapGain = msg.args[0];
-    else if (msg.address === "/bongo") flashes.push(new Flash());
-    else if (msg.address === "/bongoEnvParams") {
-      bongoAttackMs = msg.args[0];
-      bongoDecayReleaseMs = msg.args[1];
-    } else if (msg.address === "/bongoEnvOn") {
-      let isOn = msg.args[0];
-      bongoEnvIsRunning = isOn === 1;
-      bongoEnvelopeTime = 0;
-      bongoAlpha = isOn ? 0 : 255;
+    else if (msg.address === "/potGain") {
+      isPotsOn = msg.args[0];
+      if (isPotsOn) {
+        activePotId = msg.args[1];
+        potGain = msg.args[2]
+      }
     } else if (msg.address === "/granular") {
       grainGain = msg.args[0];
       grainPos = msg.args[1];
       grainLength = msg.args[2];
-
-      staticAlpha = 255 * map(grainPos, 0.01, 0.2, 1.0, 0)
+      if (grainPos > 0.07) {
+        staticAlpha = map(grainPos, 0.07, 0.2, 50, grainGain > 0.05 ? 30 : 0)
+      } else {
+        staticAlpha = map(grainPos, 0.01, 0.07, 255, 50)
+      }
+    } else if (msg.address === "/kill" ) {
+      if (msg.args[0] == 1) {
+        potGain = 0;
+        hatGain = 0;
+        clapGain = 0;
+        bassGain = 0;
+        isPotsOn = 1;
+      }
     }
+        // else if (msg.address === "/bongo") flashes.push(new Flash());
+    // else if (msg.address === "/bongoEnvParams") {
+    //   bongoAttackMs = msg.args[0];
+    //   bongoDecayReleaseMs = msg.args[1];
+    // } else if (msg.address === "/bongoEnvOn") {
+    //   let isOn = msg.args[0];
+    //   bongoEnvIsRunning = isOn === 1;
+    //   bongoEnvelopeTime = 0;
+    //   bongoAlpha = isOn ? 0 : 255;
+    // } 
   };
 }
 
@@ -108,11 +130,21 @@ function draw() {
       let y = floor(i / cols);
       let distFromCenter = dist(x, y, cols / 2, rows / 2);
       let noiseFactor = noise(x * 0.1, y * 0.1, frameCounter * 0.05);
-      console.log(grainLength, map(grainLength, 150, 0, 0.0, 0.5), map(grainLength, 100, 0, 0, frameCounter % cols))
+      let staticLineSpeed = 0;
+      let staticLineIntensity = 0;
+      if (grainLength < 20) {
+        staticLineSpeed = map(grainLength, 0, 20, 3.0, 0.0);
+        staticLineIntensity = map(grainLength, 0, 20, 0.5, 0.35)
+      } else if (grainLength < 50) {
+        staticLineIntensity = map(grainLength, 20, 50, 0.35, 0.2)
+      } else if (grainLength < 100) {
+        staticLineIntensity = map(grainLength, 50, 100, 0.2, 0.0)
+      }
+
       if (
         noiseFactor >
         map(sin(distFromCenter * 0.15), -1, 1, 0.8, random() * 0.4 + map(grainGain, 0, 1, 0.9, 0.3)) -
-          map(grainLength, 150, 0, 0.0, 0.5) * (((i + map(grainLength, 100, 0, 0, frameCounter % cols)) % (cols / 3 + 0.1)) / (cols / 3))
+          staticLineIntensity * (((i + staticLineSpeed * frameCounter % (cols / 3)) % (cols / 3 + 0.1)) / (cols / 3))
       ) {
         let c = random(staticColors);
         c.setAlpha(random(120, 200));
@@ -152,7 +184,7 @@ function draw() {
   hatBaseX = (hatNewX + hatBaseX) / 2;
   hatBaseY = (hatNewY + hatBaseY) / 2;
   fill(hatTriangleColor);
-  let h = 100;
+  let h = 120;
   let s = (2 / Math.sqrt(3)) * h;
   triangle(
     hatNewX, hatNewY - h / 2,
@@ -160,15 +192,30 @@ function draw() {
     hatNewX + s / 2, hatNewY + h / 2
   );
 
-  // ======= CLAP (RECTANGLE) =======
-  let clapOffsetX = random(-clapGain, clapGain);
-  let clapOffsetY = random(-clapGain, clapGain);
-  let clapNewX = constrain(clapBaseX + clapOffsetX, 50, width - 50);
-  let clapNewY = constrain(clapBaseY + clapOffsetY, 50, height - 50);
-  clapBaseX = (clapNewX + clapBaseX) / 2;
-  clapBaseY = (clapNewY + clapBaseY) / 2;
-  fill(clapRectangleColor);
-  rect(clapNewX, clapNewY, 100, 100);
+  // ======= CLAP or POTS (RECTANGLE) =======
+  if (mode == -1) {
+    if (isPotsOn) {
+      squareBaseX = activePotId * width / 9 + width / 9;
+      squareBaseY = 3 * height / 4;
+      let potOffsetX = random(-potGain, potGain);
+      let potOffsetY = random(-potGain, potGain);
+      let potNewX = squareBaseX + potOffsetX;
+      let potNewY = squareBaseY + potOffsetY;
+
+      fill(clapRectangleColor);
+      rect(potNewX, potNewY, 120, 120);
+    }
+  } else {
+    let clapOffsetX = random(-clapGain, clapGain);
+    let clapOffsetY = random(-clapGain, clapGain);
+    let clapNewX = constrain(squareBaseX + clapOffsetX, 50, width - 50);
+    let clapNewY = constrain(squareBaseY + clapOffsetY, 50, height - 50);
+    squareBaseX = (clapNewX + squareBaseX) / 2;
+    squareBaseY = (clapNewY + squareBaseY) / 2;
+    fill(clapRectangleColor);
+    rect(clapNewX, clapNewY, 120, 120);
+  }
+
 
   // ======= FLASHES (BONGO) =======
   buffer.clear();

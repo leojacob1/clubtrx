@@ -80,8 +80,9 @@ for (int i; i < N; i++) {
 int padState[64];
 int padStateRaw[64];
 
-0 => int mode;
+-1 => int mode;
 /*
+-1 ---> 220b
 0 --> FREESTYLE (random hits)
 1 --> MELODIC (consistent hits, discretized rates based on frequency ratios)
 2 --> Back to freestyle
@@ -166,9 +167,9 @@ fun void playHits() {
 fun void triggerSound(SndBuf buf, int c) {
     buf.pos(1500);
     adsr_bongo_high[c].keyOn();
-    toNode.start( "/bongo" );
-    1 => toNode.add;
-    toNode.send();
+    // toNode.start( "/bongo" );
+    // 1 => toNode.add;
+    // toNode.send();
     12000::samp => now;
     adsr_bongo_high[c].keyOff();
     buf.pos((buf.length() / samp) $ int);
@@ -190,10 +191,10 @@ fun void changeBongoHighEnvelope() {
 fun void graphicBongo() {
     while (true) {
         if (isBongoEnvPulsing) {
-            toNode.start( "/bongoEnvParams" );
-            (bongoEnv.attackTime() / ms) => toNode.add;
-            (bongoEnv.decayTime() / ms) + (bongoEnv.releaseTime() / ms) => toNode.add;
-            toNode.send();
+            // toNode.start( "/bongoEnvParams" );
+            // (bongoEnv.attackTime() / ms) => toNode.add;
+            // (bongoEnv.decayTime() / ms) + (bongoEnv.releaseTime() / ms) => toNode.add;
+            // toNode.send();
         }
         10::ms => now;
     }
@@ -206,9 +207,9 @@ fun void pulseBongoHighEnvelope() {
     while (true) {
         if (Math.max(0, discretizedGt0) > 0.1) {
             1 => isBongoEnvPulsing;
-            toNode.start( "/bongoEnvOn" );
-            isBongoEnvPulsing => toNode.add;
-            toNode.send();
+            // toNode.start( "/bongoEnvOn" );
+            // isBongoEnvPulsing => toNode.add;
+            // toNode.send();
             bongoEnv.keyOn();
             (20 + (1 - Math.max(0, discretizedGt0)) * 600)::ms => now; 
             bongoEnv.keyOff();
@@ -220,25 +221,15 @@ fun void pulseBongoHighEnvelope() {
             (40 + (1 - Math.max(0, discretizedGt0)) * 500)::ms => now; 
         } else {
             0 => isBongoEnvPulsing;
-            toNode.start( "/bongoEnvOn" );
-            isBongoEnvPulsing => toNode.add;
-            toNode.send();
+            // toNode.start( "/bongoEnvOn" );
+            // isBongoEnvPulsing => toNode.add;
+            // toNode.send();
             bongoEnv.keyOn();
             10::ms => now;
         }
     }
 
 }
-
-spork ~ bongoHighPanMix();
-
-spork ~ setBongoIntervalFreestyle();
-
-spork ~ playHits();
-
-spork ~ pulseBongoHighEnvelope() @=> Shred pulseBongoHighEnvelopeSporkId;
-
-spork ~ changeBongoHighEnvelope();
 
 0 => int isManualPrint;
 fun playPrint() {
@@ -310,7 +301,7 @@ fun void graphicHat() {
         Math.fabs(hatGain) * 700 => hatGain;
         hatGain => toNode.add;
         toNode.send();
-        10::ms => now;
+        20::ms => now;
     }
 }
 
@@ -321,7 +312,7 @@ fun void graphicClap() {
         Math.fabs(clapGain) * 700 => clapGain;
         clapGain => toNode.add;
         toNode.send();
-        10::ms => now;
+        20::ms => now;
     }
 }
 
@@ -418,6 +409,7 @@ if( !min.open( pad_device ) ) me.exit();
 
 0 => int isShifted; // is shift currently pressed
 
+Shred pulseBongoHighEnvelopeSporkId;
 fun void runPad() {
     while (true) {
         min => now;
@@ -528,7 +520,6 @@ fun void runPad() {
         }
     }
 }
-spork ~ runPad();
 
 // ----------- GAMETRAK -----------
 
@@ -588,7 +579,19 @@ fun void gametrak()
             else if( msg.isButtonDown() )
             {
                 <<< "button", msg.which, "down" >>>;
-                if (mode == 0) {
+                if (mode == -1) {
+                    spork ~ setUp();
+                    spork ~ runPad();
+                    spork ~ bongoHighPanMix();
+
+                    spork ~ setBongoIntervalFreestyle();
+
+                    spork ~ playHits();
+
+                    spork ~ pulseBongoHighEnvelope() @=> pulseBongoHighEnvelopeSporkId;
+
+                    spork ~ changeBongoHighEnvelope();
+                } else if (mode == 0) {
                     spork ~ prepMode1();
                     spork ~ playPrint();
                     spork ~ playBass();
@@ -600,13 +603,16 @@ fun void gametrak()
                 } else if (mode == 2) {
                     0.0 => gain_bongo.gain;
                 } else if (mode == 3) {
-                    toChuck.start( "/mode" );
-                    1 => toChuck.add;
-                    toChuck.send();
                     slowBongoInstrumentId.exit();
                     spork ~ playBongoBuild();
                 }
                 mode + 1 => mode;
+                toChuck.start( "/mode" );
+                toNode.start("/mode");
+                mode => toChuck.add;
+                mode => toNode.add;
+                toChuck.send();
+                toNode.send();
                 
             }
             
@@ -751,6 +757,6 @@ fun void setUp() {
             mout.send(NOTE_ON, i, GREEN);
         }
     }
-} spork ~ setUp();
+}
 
 eon => now;
