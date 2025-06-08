@@ -1,30 +1,25 @@
 // 🎛 Unified p5.js Sketch: Combines animated bass/hat/clap shapes with background static texture
-let mode = -1;
+let mode = 0;
 let bassGain = 0;
 let hatGain = 0;
 let clapGain = 0;
 let potGain = 0;
 let isPotsOn = 0;
 let activePotId = -1;
-let bongoEnvIsRunning = false;
-let bongoEnvelopeTime = 0;
-let bongoAttackMs = 0.0;
-let bongoDecayReleaseMs = 0.0;
 let bassBaseX, bassBaseY;
 let hatBaseX, hatBaseY;
 let squareBaseX, squareBaseY;
 let bassCircleColor;
 let hatTriangleColor;
 let clapRectangleColor;
-let bongoAlpha = 255;
 let staticAlpha = 0;
+
+let textHeight = 0;
 
 let grainGain;
 let grainPos;
 let grainLength;
 
-let flashes = [];
-let buffer;
 let bigRadius = 130;
 
 let staticSquares = [];
@@ -36,7 +31,9 @@ let staticColors;
 
 function setup() {
   frameRate(24);
+  background(0);
   createCanvas(windowWidth, windowHeight);
+
   rectMode(CENTER);
   noStroke();
 
@@ -56,8 +53,6 @@ function setup() {
   bassCircleColor = color(random(255), random(255), random(255));
   hatTriangleColor = color(random(255), random(255), random(255));
   clapRectangleColor = color(random(255), random(255), random(255));
-
-  buffer = createGraphics(width, height);
 
   // Static palette
   staticColors = [
@@ -106,25 +101,16 @@ function setup() {
         bassGain = 0;
         isPotsOn = 1;
       }
+    } else if (msg.address === "/intro") {
+      textHeight = msg.args[0];
     }
-        // else if (msg.address === "/bongo") flashes.push(new Flash());
-    // else if (msg.address === "/bongoEnvParams") {
-    //   bongoAttackMs = msg.args[0];
-    //   bongoDecayReleaseMs = msg.args[1];
-    // } else if (msg.address === "/bongoEnvOn") {
-    //   let isOn = msg.args[0];
-    //   bongoEnvIsRunning = isOn === 1;
-    //   bongoEnvelopeTime = 0;
-    //   bongoAlpha = isOn ? 0 : 255;
-    // } 
   };
 }
 
 function draw() {
-  background(0);
-
+  background(0)
   // ======= STATIC BACKGROUND =======
-  if (frameCounter % staticFlashRate === 0) {
+  if (frameCounter % staticFlashRate === 0 && mode == 77) {
     for (let i = 0; i < staticSquares.length; i++) {
       let x = i % cols;
       let y = floor(i / cols);
@@ -193,7 +179,7 @@ function draw() {
   );
 
   // ======= CLAP or POTS (RECTANGLE) =======
-  if (mode == -1) {
+  if (mode == 11) {
     if (isPotsOn) {
       squareBaseX = activePotId * width / 9 + width / 9;
       squareBaseY = 3 * height / 4;
@@ -205,7 +191,7 @@ function draw() {
       fill(clapRectangleColor);
       rect(potNewX, potNewY, 120, 120);
     }
-  } else {
+  } else if (mode >= 33) {
     let clapOffsetX = random(-clapGain, clapGain);
     let clapOffsetY = random(-clapGain, clapGain);
     let clapNewX = constrain(squareBaseX + clapOffsetX, 50, width - 50);
@@ -215,68 +201,13 @@ function draw() {
     fill(clapRectangleColor);
     rect(clapNewX, clapNewY, 120, 120);
   }
+  if (mode == 0 || mode == 22) {
+    textFont('Times New Roman');
+    textSize(128);
+    fill(255);
+    textAlign(CENTER, CENTER);
+    text(`Act ${mode === 0 ? 'I' : 'II'}`, width / 2, (1 - textHeight) * height + 128);
+  }
 
-
-  // ======= FLASHES (BONGO) =======
-  buffer.clear();
-  // for (let i = flashes.length - 1; i >= 0; i--) {
-  //   flashes[i].update();
-  //   flashes[i].draw(buffer);
-  //   if (flashes[i].isDone()) flashes.splice(i, 1);
-  // }
-
-  // if (bongoEnvIsRunning) {
-  //   let attackFrames = bongoAttackMs / 1000 * 60;
-  //   let decayFrames = bongoDecayReleaseMs / 1000 * 60;
-  //   let totalFrames = attackFrames + decayFrames;
-  //   if (bongoEnvelopeTime <= attackFrames) {
-  //     bongoAlpha = map(bongoEnvelopeTime, 0, attackFrames, 0, 255);
-  //   } else if (bongoEnvelopeTime <= totalFrames) {
-  //     bongoAlpha = map(bongoEnvelopeTime, attackFrames, totalFrames, 255, 0);
-  //   } else {
-  //     bongoAlpha = 0;
-  //     bongoEnvIsRunning = false;
-  //   }
-  //   bongoEnvelopeTime++;
-  // }
-
-  // image(buffer, 0, 0);
   frameCounter++;
-}
-
-class Flash {
-  constructor() {
-    this.size = 50;
-    let angle = random(TWO_PI);
-    let r = sqrt(random()) * (bigRadius - this.size / 2);
-    this.x = width / 3 * 2 + cos(angle) * r;
-    this.y = height / 3 * 2 + sin(angle) * r;
-    this.timeAlive = 0;
-  }
-
-  update() {
-    this.timeAlive++;
-  }
-
-  draw(pg) {
-    pg.fill(255, 255, 0, bongoAlpha);
-    pg.noStroke();
-    pg.ellipse(this.x, this.y, this.size);
-  }
-
-  isDone() {
-    if (bongoEnvIsRunning) {
-      let totalFrames = (bongoAttackMs + bongoDecayReleaseMs) / 1000 * 60;
-      return this.timeAlive > totalFrames;
-    } else {
-      return this.timeAlive > 5;
-    }
-  }
-}
-
-function windowResized() {
-  resizeCanvas(windowWidth, windowHeight);
-  cols = ceil(width / staticSize);
-  rows = ceil(height / staticSize);
-  staticSquares = new Array(cols * rows).fill(null);
 }

@@ -80,14 +80,16 @@ for (int i; i < N; i++) {
 int padState[64];
 int padStateRaw[64];
 
--1 => int mode;
+0 => int mode;
 /*
--1 ---> 220b
-0 --> FREESTYLE (random hits)
-1 --> MELODIC (consistent hits, discretized rates based on frequency ratios)
-2 --> Back to freestyle
-3 --> OFF
-4 --> arpeggio bongo instrument
+0 ---> Act I
+11 ---> 220b
+22 --> Act II
+33 --> FREESTYLE (random hits)
+44 --> MELODIC (consistent hits, discretized rates based on frequency ratios)
+55 --> Back to freestyle
+66 --> OFF: rhythmic
+77 --> arpeggio bongo instrument
 */
 720.0 => float quarterIntervalMs;
 0.0 => float discretizedGt0;
@@ -97,7 +99,7 @@ int padStateRaw[64];
 // Balance gains between panned buses and center bus (center bus takes over afte mode 0)
 fun bongoHighPanMix() {
   while (true) {
-    if (mode) {
+    if (mode != 33) {
         0.0 => bongoBusLeft.gain;
         0.0 => bongoBusRight.gain;
         1.0 => bongoBusCenter.gain;
@@ -114,7 +116,7 @@ fun bongoHighPanMix() {
 fun void setBongoIntervalFreestyle() {
     // Apply eased mapping. more "gt.axis[2]" --> less "sec"
     while (true) {
-        if (mode == 1 || mode >= 3) {
+        if (mode == 44 || mode >= 66) {
             10::ms => now;
             continue;
         }
@@ -123,11 +125,11 @@ fun void setBongoIntervalFreestyle() {
         1.0 - Math.pow(1.0 - gt.axis[2], curve) => float eased;
         (50/4) + (1800 * (1.0 - eased)) => float intervalMs;
 
-        if (gt.axis[2] >= 0.8 || mode) {
+        if (gt.axis[2] >= 0.8 || mode != 33) {
             // intervalMs * 3 => quarterIntervalMs; // assume interval is a triplet
             intervalMs::ms => bongoInterval;
         } else {
-            // add herky jerkiness if mode = 0
+            // add herky jerkiness if mode = 33
             1 - (gt.axis[2] / 0.8) => float randomnessRange;
             Std.rand2f(intervalMs * (1 - 0.9 * randomnessRange), intervalMs * (1 + 0.9 * randomnessRange))::ms => bongoInterval;
         }
@@ -149,13 +151,13 @@ fun void playBongoBuild() {
 // Main function to play buffer at random intervals
 fun void playHits() {
     while (true) {
-        if (mode != 1 && gt.axis[2] < 0.1) {
+        if (mode != 44 && gt.axis[2] < 0.1) {
             10::ms => now;
             continue;
-        } else if (!mode) {
+        } else if (mode == 33) {
             Std.rand2f(0.4, 0.9) => bufs_bongo_high[current].gain;
             Std.rand2f(-1.0 * (1 - Math.pow(gt.axis[2], 3)), 1.0 * (1 - Math.pow(gt.axis[2], 3))) => pans_bongo_high[current].pan;
-        } else if (mode >= 1) {
+        } else if (mode >= 44) {
             1.1 => bufs_bongo_high[current].gain;
         }
         spork ~ triggerSound(bufs_bongo_high[current], current);
@@ -177,7 +179,7 @@ fun void triggerSound(SndBuf buf, int c) {
 
 fun void changeBongoHighEnvelope() {
   while (true) {
-    if (!mode) {
+    if (mode == 33) {
         Math.max(0, gt.axis[0]) => discretizedGt0;
     }
     bongoEnv.attackTime((20 + (1 - discretizedGt0) * 350)::ms);
@@ -213,7 +215,7 @@ fun void pulseBongoHighEnvelope() {
             bongoEnv.keyOn();
             (20 + (1 - Math.max(0, discretizedGt0)) * 600)::ms => now; 
             bongoEnv.keyOff();
-            if (mode >= 4) {
+            if (mode >= 77) {
                 noteToBongoInterval(i % 3) / 2 => bongoInterval;
                 (i % 9) / 9.0 * 2.0 - 1.0 => pan_bongo_instrument.pan;
                 i + 2 => i;
@@ -391,11 +393,7 @@ if( me.args() ) me.arg(0) => Std.atoi => pad_device;
 
 MidiIn min;
 MidiOut mout;
-
-if( !mout.open(0) ) me.exit();
 MidiMsg pad_msg;
-
-if( !min.open( pad_device ) ) me.exit();
 
 /* --------- MIDI SETUP --------- */
 
@@ -411,6 +409,7 @@ if( !min.open( pad_device ) ) me.exit();
 
 Shred pulseBongoHighEnvelopeSporkId;
 fun void runPad() {
+    <<< "running pad bongo" >>>;
     while (true) {
         min => now;
         while (min.recv(pad_msg)) {
@@ -418,7 +417,7 @@ fun void runPad() {
             pad_msg.data2 => int pad;
             pad_msg.data3 => int velocity;
             // <<< inputType, pad, velocity >>>;
-            if (mode == 1 && pad >= 0 && pad < 7 && inputType == NOTE_ON) {
+            if (mode == 44 && pad >= 0 && pad < 7 && inputType == NOTE_ON) {
                 // Play melody of bongo instrument using 8th row (bottom row)
                 1 => padState[pad];
                 for (int i; i < 7; i++) {
@@ -431,7 +430,7 @@ fun void runPad() {
                         mout.send(NOTE_ON, i, RED);
                     }
                 }
-            } else if (mode == 1 && pad >= 8 && pad < 12) {
+            } else if (mode == 44 && pad >= 8 && pad < 12) {
                 // Play rhythm of bongo instrument using 7th row
                 pulseBongoHighEnvelopeSporkId.exit();
                 spork ~ pulseBongoHighEnvelope() @=> pulseBongoHighEnvelopeSporkId;
@@ -521,6 +520,18 @@ fun void runPad() {
     }
 }
 
+Shred sendIntroParamsSh;
+fun void sendIntroParams() {  
+  while (true) {
+    if (mode == 0 || mode == 22) {
+      toNode.start( "/intro" );
+      gt.axis[2] => toNode.add;
+      toNode.send();
+    }
+    50::ms => now;
+  }
+} spork ~ sendIntroParams() @=> sendIntroParamsSh;
+
 // ----------- GAMETRAK -----------
 
 0 => float DEADZONE;
@@ -578,8 +589,13 @@ fun void gametrak()
             // joystick button down
             else if( msg.isButtonDown() )
             {
-                <<< "button", msg.which, "down" >>>;
-                if (mode == -1) {
+                <<< "button", msg.which, "down", mode >>>;
+                if (mode == 0) {
+                    Machine.remove(sendIntroParamsSh.id());
+                } else if (mode == 11) {
+                    spork ~ sendIntroParams() @=> sendIntroParamsSh;
+                } else if (mode == 22) {
+                    Machine.remove(sendIntroParamsSh.id());
                     spork ~ setUp();
                     spork ~ runPad();
                     spork ~ bongoHighPanMix();
@@ -591,22 +607,22 @@ fun void gametrak()
                     spork ~ pulseBongoHighEnvelope() @=> pulseBongoHighEnvelopeSporkId;
 
                     spork ~ changeBongoHighEnvelope();
-                } else if (mode == 0) {
-                    spork ~ prepMode1();
+                } else if (mode == 33) {
+                    spork ~ prepMelodyMode();
                     spork ~ playPrint();
                     spork ~ playBass();
                     spork ~ playHat();
                     spork ~ playClap();
 
-                } else if (mode == 1) {
+                } else if (mode == 44) {
                     spork ~ slowBongoInstrument() @=> slowBongoInstrumentId;
-                } else if (mode == 2) {
+                } else if (mode == 55) {
                     0.0 => gain_bongo.gain;
-                } else if (mode == 3) {
+                } else if (mode == 66) {
                     slowBongoInstrumentId.exit();
                     spork ~ playBongoBuild();
                 }
-                mode + 1 => mode;
+                mode + 11 => mode;
                 toChuck.start( "/mode" );
                 toNode.start("/mode");
                 mode => toChuck.add;
@@ -662,7 +678,7 @@ fun dur noteToBongoInterval(int i) {
     return bongoIntervalBase; // (root)
 }
 
-fun void prepMode1() {
+fun void prepMelodyMode() {
     // Lock in base envelope and pitch for bongo instrument
     // default is eight notes
     ((20 + (1 - Math.max(0, discretizedGt0)) * 600) + (40 + (1 - Math.max(0, discretizedGt0)) * 500)) * 2 => quarterIntervalMs; 
@@ -705,6 +721,9 @@ fun void flashButton(int pad) {
 }
 
 fun void setUp() {
+    if( !mout.open(0) ) me.exit();
+    if( !min.open( pad_device ) ) me.exit();
+
     for (56 => int i; i < 64; i++) {
         0 => padState[i];
     }

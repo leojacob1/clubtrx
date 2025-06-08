@@ -48,7 +48,7 @@ bufFadi.samples() => bufFadi.pos;
 (bufPots.samples() / 8)::samp => dur eighth;
 (bufPots.samples() / 16)::samp => dur sixteenth;
 
--1 => int mode;
+0 => int mode;
 fun void listenMode()
 {
     OscIn oin;
@@ -58,149 +58,31 @@ fun void listenMode()
     while ( true )
         {
         oin => now;
-
         while ( oin.recv( msg ) )
         {
             msg.getInt(0) => mode;
-            if (mode != -1) {
+            if (mode == 22) {
               if (isKilled) Machine.remove(runPadSh.id());
+            } else if (mode == 11) {
+              if( !mout.open(0) ) me.exit();
+              if( !min.open( device ) ) me.exit();
+              spork ~ runPad() @=> runPadSh;
+              spork ~ playPots() @=> playPotsSh;
+              spork ~ playKick() @=> playKickSh;
+              spork ~ playFadi() @=> playFadiSh;
+              clearPadState();
             }
         }
     }
 }
-
-
-/* --------- CHUGL SETUP --------- */
-
-
-// // uncomment to run in fullscreen mode
-// GG.fullscreen();
-
-// // empty group to hold all our primitives
-// GGen group --> GG.scene();
-
-// Geometry customGeometry;
-
-// // Pass in 3D positions for each vertex
-// customGeometry.vertexAttribute(
-//     Geometry.AttributeLocation_Position,
-//     3,
-//     [
-//         0.0, 0.866, 0.0,  // top vertex
-//        -0.5, 0.0,   0.0,  // bottom left
-//         0.5, 0.0,   0.0   // bottom right
-//     ]
-// );
-
-// // Pass in normals (point out along +Z axis for flat shading)
-// customGeometry.vertexAttribute(
-//     Geometry.AttributeLocation_Normal,
-//     3,
-//     [
-//         0.0, 0.0, 1.0,  // normal for vertex 0
-//         0.0, 0.0, 1.0,  // normal for vertex 1
-//         0.0, 0.0, 1.0   // normal for vertex 2
-//     ]
-// );
-
-// // Pass in UV coordinates (if you want to texture it)
-// customGeometry.vertexAttribute(
-//     Geometry.AttributeLocation_UV,
-//     2,
-//     [
-//         0.5, 1.0,  // top vertex
-//         0.0, 0.0,  // bottom left
-//         1.0, 0.0   // bottom right
-//     ]
-// );
-
-// // Pass in indices to define the triangle (1 triangle = 3 indices)
-// customGeometry.indices(
-//     [
-//         0, 1, 2
-//     ]
-// );
-
-// // Create a material
-// PhongMaterial mat;
-// mat.color(@(1.0, 0.5, 0.2)); // orange-ish color (optional)
-
-// // Create the mesh from geometry and material, add to the scene
-// GCircle cubeKick --> group;
-// GCube cubePots --> group;
-// GMesh cubeFadi(customGeometry, mat) --> group;
-
-
-// // put into an array of GMesh (super class)
-// [ 
-//   cubeKick,
-//   cubePots,
-//   cubeFadi,
-// ] @=> GMesh ggens[];
-
-// 0 => int pos;
-// // loop over our array
-// for( GMesh obj : ggens )
-// {
-//     float r;
-//     float g;
-//     float b;
-//     // set position
-//     if (pos == 2) {
-//       0.0 => obj.posX;
-//       0.0 => obj.posY;
-//     } else {
-//       Math.random2f(-4.3, 4.3) => obj.posX;
-//       Math.random2f(-2.5, 2.5) => obj.posY;
-//     }
-
-//       Math.random2f(0.0, 1.0) => r;
-//       Math.random2f(0.0, 1.0) => g;
-//       Math.random2f(0.0, 1.0) => b;
-    
-//     // set color on the material for each GGen
-//     obj.mat() $ PhongMaterial @=> PhongMaterial mat;
-//     @(r, g, b) => mat.color;
-//     mat.specular(@(0.0, 0.0, 0.0));     // no specular highlights
-//     mat.shine(0.0);                     // zero shininess (even though specular is off)
-//     mat.emission(@(0.0, 0.0, 0.0));     // no emissive lighting
-//     mat.envmapBlend(PhongMaterial.EnvmapBlend_None); // disable environment maps
-//     mat.normalFactor(0.0);              // disable normal mapping if any
-//     pos++;
-// }
-
-// // position
-// GG.camera().orthographic();
-// GG.camera().posZ( 1 );
-
-/* --------- MIDI SETUP --------- */
-
-// 56-63 --> Pots control
-// 82 --> Pots Manual Mode on/off
-// 48-55 --> Kick control
-// 83 --> Double kick mode on/off
-// 40-47 --> Dog bark (fadi) control on/off
-// 32-40 --> Dog bark (fadi) control timing (eight, sixteenth, eight triplets)
-// 84 --> Bark manual mode on/off
-// 85 --> Bark manual pad
-
-// 16 --> Pots all on, 23 --> Pots all off
-// 8 --> Kicks all on, 15 --> Kicks all off
-// 0 --> Barks all on, 7 --> Barks all off
-// 89 --> Kill switch
 
 0 => int device;
 if( me.args() ) me.arg(0) => Std.atoi => device;
 
 MidiIn min;
 MidiOut mout;
-
-if( !mout.open(0) ) me.exit();
 MidiMsg msg;
 
-if( !min.open( device ) ) me.exit();
-
-<<< "MIDI device:", min.num(), " -> ", min.name() >>>;
 144 => int NOTE_ON;
 128 => int NOTE_OFF;
 176 => int SLIDER;
@@ -223,27 +105,17 @@ Shred playFadiSh;
 Shred playKickSh;
 
 // Fill it with 64 zeros
-for (0 => int i; i < 64; i++) {
-    0 => padState[i];
+fun void clearPadState() {
+  for (0 => int i; i < 64; i++) {
+      0 => padState[i];
+      mout.send(144, i, OFF);
+  }
 }
 
+
 fun setUp() {
-  for (56 => int i; i < 64; i++) {
-    0 => padState[i];
-    mout.send(144, i, OFF);
-  }
-  for (48 => int i; i < 56; i++) {
-    0 => padState[i];
-    mout.send(144, i, OFF);
-  }
-  for (40 => int i; i < 48; i++) {
-    0 => padState[i];
-    mout.send(144, i, OFF);
-  }
-  for (32 => int i; i < 40; i++) {
-    0 => padState[i];
-    mout.send(144, i, OFF);
-  }
+  clearPadState();
+
   mout.send(144, 82, OFF);
   mout.send(144, 83, OFF);
   mout.send(144, 84, OFF);
@@ -255,7 +127,8 @@ fun setUp() {
   mout.send(144, 0, OFF);
   mout.send(144, 7, OFF);
   mout.send(144, 89, OFF);
-}
+} spork ~ setUp();
+
 
 /* --------- Live audio code --------- */
 
@@ -299,9 +172,7 @@ fun void unKill() {
   1.0 => gainKickMaster.gain;
   1.0 => gainPots.gain;
   1.0 => gainFadi.gain;
-  // cubeKick.sca(@(1.0, 1.0, 1.0));
-  // cubePots.sca(@(1.0, 1.0, 1.0));
-  // cubeFadi.sca(@(1.0, 1.0, 1.0));
+
   mout.send(144, 89, OFF);
   spork ~ playPots() @=> playPotsSh;
   spork ~ playKick() @=> playKickSh;
@@ -315,7 +186,7 @@ fun void unKill() {
 Shred manualPotsSh;
 Shred manualFadiSh;
 
-fun runPad() {
+fun void runPad() {
   int activeManualPad;
   while (true) {
     min => now;
@@ -683,13 +554,8 @@ fun playFadi() {
   }
 }
 
-spork ~ setUp();
-spork ~ runPad() @=> runPadSh;
-spork ~ playPots() @=> playPotsSh;
-spork ~ playKick() @=> playKickSh;
-spork ~ playFadi() @=> playFadiSh;
+spork ~ clearPadState();
 spork ~ listenMode();
-
 /* --------- Live visual code --------- */
 
 // Function to shake the cube
@@ -758,11 +624,5 @@ fun void graphicFadi() {
     10::ms => now;
   }
 }
-
-// // infinite time loop
-// while( true )
-// {
-//     GG.nextFrame() => now;
-// }
 
 eon => now;

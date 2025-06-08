@@ -23,6 +23,8 @@ toNode.dest(host, nodePort);
 // max lisa voices
 30 => int LISA_MAX_VOICES;
 
+0 => int mode;
+
 Shred gametrakSh;
 Shred trackSynthParamsSh;
 Shred mainSh;
@@ -98,7 +100,8 @@ fun void listenMode() {
 
         while ( oin.recv( msg ) )
         {
-            if (msg.getInt(0) == 4) {
+            msg.getInt(0) => mode;
+            if (mode == 22 || mode == 77) {
                 spork ~ gametrak() @=> gametrakSh;
                 spork ~ trackSynthParams() @=> trackSynthParamsSh;
                 spork ~ main() @=> mainSh;
@@ -221,6 +224,10 @@ fun void gametrak()
         }
     }
 }
+
+spork ~ gametrak() @=> gametrakSh;
+spork ~ trackSynthParams() @=> trackSynthParamsSh;
+spork ~ main() @=> mainSh;
 
 // -------------------------- mapping gt values -------------------------
 
