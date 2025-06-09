@@ -170,7 +170,7 @@ fun void trackSynthParams()
 {
     while (true)
     {
-        if (mode != 0 && mode != 22 && mode != 77) {
+        if (mode != 0 && mode != 22 && mode < 77) {
             100::ms => now;
             continue;
         }
@@ -179,7 +179,7 @@ fun void trackSynthParams()
         // Math.sqrt(Math.pow(gt.axis[4], 1.5) + Math.pow(gt.axis[3], 1.5)) => float rightJoyStickXYInput;
         // <<< rightJoyStickXYInput, gt.axis[4] >>>;
         250 * Math.pow(gt[4], 2) + 500 * gt[4] + 250 => float lengthInput;
-        mapAxis2Range(lengthInput, 1.0, 1000.0, 1.0, 1000.0)::ms => GRAIN_LENGTH; // TODO: make this diff scale
+        mapAxis2Range(lengthInput, 1.0, 1000.0, 1.3, 1000.0)::ms => GRAIN_LENGTH; // TODO: make this diff scale
         toNode.start( "/granular" );
         g.gain() => toNode.add;
         GRAIN_POSITION => toNode.add;
@@ -197,7 +197,7 @@ fun void main()
 {
     while( true )
     {
-        if (mode != 0 && mode != 22 && mode != 77) {
+        if (mode != 0 && mode != 22 && mode < 77) {
             100::ms => now;
             continue;
         }

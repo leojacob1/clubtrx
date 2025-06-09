@@ -100,6 +100,15 @@ function setup() {
         clapGain = 0;
         bassGain = 0;
         isPotsOn = 1;
+      } else if (msg.args[0] == 2) {
+        potGain = 0;
+        hatGain = 0;
+        clapGain = 0;
+        bassGain = 0;
+        isPotsOn = 0;
+        activePotId = -1;
+        // Hide shapes by setting a flag
+        window.hideShapes = true;
       }
     } else if (msg.address === "/intro") {
       textHeight = msg.args[0];
@@ -110,7 +119,7 @@ function setup() {
 function draw() {
   background(0)
   // ======= STATIC BACKGROUND =======
-  if (frameCounter % staticFlashRate === 0 && mode == 77) {
+  if (frameCounter % staticFlashRate === 0 && mode >= 77) {
     for (let i = 0; i < staticSquares.length; i++) {
       let x = i % cols;
       let y = floor(i / cols);
@@ -153,13 +162,18 @@ function draw() {
   }
 
   // ======= Title text =======
-
   if (mode == 0 || mode == 22) {
     textFont('Times New Roman');
-    textSize(128);
+    textSize(256);
     fill(255);
     textAlign(CENTER, CENTER);
     text(`Act ${mode === 0 ? 'I' : 'II'}`, width / 2, (1 - textHeight) * height + 200);
+  }
+
+  // Hide all shapes if /kill 2 was received
+  if (window.hideShapes) {
+    frameCounter++;
+    return;
   }
 
   // ======= BASS (CIRCLE) =======
@@ -201,7 +215,7 @@ function draw() {
       fill(clapRectangleColor);
       rect(potNewX, potNewY, 120, 120);
     }
-  } else if (mode >= 33) {
+  } else if (mode >= 22) {
     let clapOffsetX = random(-clapGain, clapGain);
     let clapOffsetY = random(-clapGain, clapGain);
     let clapNewX = constrain(squareBaseX + clapOffsetX, 50, width - 50);

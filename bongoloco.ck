@@ -35,9 +35,9 @@ GameTrak gt;
 
 // Sndbufs for rhythmic elements in second part
 SndBuf buf_print => Gain gain_print => Pan2 pan_print => dac;
-SndBuf buf_bass => Gain gain_monitor_bass => Gain gain_bass => dac;
-SndBuf buf_hat => Gain gain_monitor_hat => Gain gain_hat => Gain gain_hat_slider => dac;
-SndBuf buf_clap => Gain gain_monitor_clap => Gain gain_clap => Gain gain_clap_slider => dac;
+SndBuf buf_bass => Gain gain_bass_slider => Gain gain_monitor_bass => Gain gain_bass => dac;
+SndBuf buf_hat => Gain gain_hat_slider => Gain gain_monitor_hat => Gain gain_hat => dac;
+SndBuf buf_clap => Gain gain_clap_slider => Gain gain_monitor_clap => Gain gain_clap => dac;
 SndBuf buf_bleep => JCRev rev_bleep => Gain gain_bleep => dac;
 
 0.7 => float GAIN_BUF_BONGO => gain_bongo.gain;
@@ -76,6 +76,11 @@ for (int i; i < N; i++) {
 
 int padState[64];
 int padStateRaw[64];
+
+0 => int printOverrideStatus; // 0 - normal, 1 - all on, 2 - all off
+0 => int bassOverrideStatus; // 0 - normal, 1 - all on, 2 - all off
+0 => int hatOverrideStatus; // 0 - normal, 1 - all on, 2 - all off
+0 => int clapOverrideSTatus; // 0 - normal, 1 - all on, 2 - all off
 
 0 => int mode;
 /*
@@ -260,7 +265,7 @@ fun void graphicBass() {
         } else if (bassGain < 0.1 * bassAdjustment) {
             0.006 / bassAdjustment => bassGain;
         }
-        bassGain * 200 / bassAdjustment => toNode.add;
+        bassGain * 300 / bassAdjustment => toNode.add;
         toNode.send();
         10::ms => now;
     }
@@ -270,7 +275,7 @@ fun void graphicHat() {
     while (true) {
         toNode.start( "/hatGain" );
         gain_monitor_hat.last() => float hatGain;
-        Math.fabs(hatGain) * 700 / hatAdjustment => hatGain;
+        Math.fabs(hatGain) * 1100 / hatAdjustment => hatGain;
         hatGain => toNode.add;
         toNode.send();
         20::ms => now;
@@ -281,7 +286,7 @@ fun void graphicClap() {
     while (true) {
         toNode.start( "/clapGain" );
         gain_monitor_clap.last() => float clapGain;
-        Math.fabs(clapGain) * 700 / clapAdjustment => clapGain;
+        Math.fabs(clapGain) * 1100 / clapAdjustment => clapGain;
         clapGain => toNode.add;
         toNode.send();
         20::ms => now;
@@ -392,10 +397,10 @@ fun void runPad() {
             pad_msg.data2 => int pad;
             pad_msg.data3 => int velocity;
             // <<< inputType, pad, velocity >>>;
-            if (mode == 44 && pad >= 0 && pad < 7 && inputType == NOTE_ON) {
+            if (mode == 44 && pad >= 0 && pad < 6 && inputType == NOTE_ON) {
                 // Play melody of bongo instrument using 8th row (bottom row)
                 1 => padState[pad];
-                for (int i; i < 7; i++) {
+                for (int i; i < 6; i++) {
                     if (i == pad) {
                         1 => padState[pad];
                         mout.send(NOTE_ON, pad, GREEN);
@@ -494,7 +499,7 @@ fun void runPad() {
                 if (pad == 48) {
                     Math.pow(velocity / 127.0, 2) => gain_print.gain;
                 } else if (pad == 49) {
-                    Math.pow(velocity / 127.0, 2) => gain_bass.gain;
+                    Math.pow(velocity / 127.0, 2) => gain_bass_slider.gain;
                 } else if (pad == 50) {
                     Math.pow(velocity / 127.0, 2) => gain_hat_slider.gain;
                 } else if (pad == 51) {
@@ -502,6 +507,205 @@ fun void runPad() {
                 } else if (pad == 56) {
                     Math.pow(velocity / 127.0, 2) => gain_bongo_slider.gain;
                 }
+            } else if (pad == 30 && inputType == NOTE_ON) {
+                if (printOverrideStatus != 1) {
+                    mout.send(NOTE_ON, 30, GREEN);
+                    mout.send(NOTE_ON, 31, OFF);
+                    for (56 => int i; i < 64; i++) {
+                        if (printOverrideStatus == 0) padState[i] => padStateRaw[i];
+                        1 => padState[i];
+                        mout.send(NOTE_ON, i, RED);
+                    }
+                    1 => printOverrideStatus;
+                } else {
+                    0 => printOverrideStatus;
+                    mout.send(NOTE_ON, 30, OFF);
+                    for (56 => int i; i < 64; i++) {
+                        padStateRaw[i] => padState[i];
+                        padStateToColor(padStateRaw[i]) => int color;
+                        if (color == -1) {
+                            spork ~ flashButton(i);
+                        } else {
+                            mout.send(NOTE_ON, i, color);
+                        }
+                    }
+                }
+            } else if (pad == 31 && inputType == NOTE_ON) {
+                if (printOverrideStatus != 2) {
+                    mout.send(NOTE_ON, 31, RED);
+                    mout.send(NOTE_ON, 30, OFF);
+                    for (56 => int i; i < 64; i++) {
+                        if (printOverrideStatus == 0) padState[i] => padStateRaw[i];
+                        0 => padState[i];
+                        mout.send(NOTE_ON, i, OFF);
+                    }
+                    2 => printOverrideStatus;
+                } else {
+                    0 => printOverrideStatus;
+                    mout.send(NOTE_ON, 31, OFF);
+                    for (56 => int i; i < 64; i++) {
+                        padStateRaw[i] => padState[i];
+                        padStateToColor(padStateRaw[i]) => int color;
+                        if (color == -1) {
+                            spork ~ flashButton(i);
+                        } else {
+                            mout.send(NOTE_ON, i, color);
+                        }
+                    }
+                }
+            }
+
+            // BASS OVERRIDE (pads 22/23, pads 48-55)
+            else if (pad == 22 && inputType == NOTE_ON) {
+                if (bassOverrideStatus != 1) {
+                    mout.send(NOTE_ON, 22, GREEN);
+                    mout.send(NOTE_ON, 23, OFF);
+                    for (48 => int i; i < 56; i++) {
+                        if (bassOverrideStatus == 0) padState[i] => padStateRaw[i];
+                        1 => padState[i];
+                        mout.send(NOTE_ON, i, RED);
+                    }
+                    1 => bassOverrideStatus;
+                } else {
+                    0 => bassOverrideStatus;
+                    mout.send(NOTE_ON, 22, OFF);
+                    for (48 => int i; i < 56; i++) {
+                        padStateRaw[i] => padState[i];
+                        padStateToColor(padStateRaw[i]) => int color;
+                        if (color == -1) {
+                            spork ~ flashButton(i);
+                        } else {
+                            mout.send(NOTE_ON, i, color);
+                        }
+                    }
+                }
+            } else if (pad == 23 && inputType == NOTE_ON) {
+                if (bassOverrideStatus != 2) {
+                    mout.send(NOTE_ON, 23, RED);
+                    mout.send(NOTE_ON, 22, OFF);
+                    for (48 => int i; i < 56; i++) {
+                        if (bassOverrideStatus == 0) padState[i] => padStateRaw[i];
+                        0 => padState[i];
+                        mout.send(NOTE_ON, i, OFF);
+                    }
+                    2 => bassOverrideStatus;
+                } else {
+                    0 => bassOverrideStatus;
+                    mout.send(NOTE_ON, 23, OFF);
+                    for (48 => int i; i < 56; i++) {
+                        padStateRaw[i] => padState[i];
+                        padStateToColor(padStateRaw[i]) => int color;
+                        if (color == -1) {
+                            spork ~ flashButton(i);
+                        } else {
+                            mout.send(NOTE_ON, i, color);
+                        }
+                    }
+                }
+            }
+
+            // HAT OVERRIDE (pads 14/15, pads 40-47)
+            else if (pad == 14 && inputType == NOTE_ON) {
+                if (hatOverrideStatus != 1) {
+                    mout.send(NOTE_ON, 14, GREEN);
+                    mout.send(NOTE_ON, 15, OFF);
+                    for (40 => int i; i < 48; i++) {
+                        if (hatOverrideStatus == 0) padState[i] => padStateRaw[i];
+                        1 => padState[i];
+                        mout.send(NOTE_ON, i, RED);
+                    }
+                    1 => hatOverrideStatus;
+                } else {
+                    0 => hatOverrideStatus;
+                    mout.send(NOTE_ON, 14, OFF);
+                    for (40 => int i; i < 48; i++) {
+                        padStateRaw[i] => padState[i];
+                        padStateToColor(padStateRaw[i]) => int color;
+                        if (color == -1) {
+                            spork ~ flashButton(i);
+                        } else {
+                            mout.send(NOTE_ON, i, color);
+                        }
+                    }
+                }
+            } else if (pad == 15 && inputType == NOTE_ON) {
+                if (hatOverrideStatus != 2) {
+                    mout.send(NOTE_ON, 15, RED);
+                    mout.send(NOTE_ON, 14, OFF);
+                    for (40 => int i; i < 48; i++) {
+                        if (hatOverrideStatus == 0) padState[i] => padStateRaw[i];
+                        0 => padState[i];
+                        mout.send(NOTE_ON, i, OFF);
+                    }
+                    2 => hatOverrideStatus;
+                } else {
+                    0 => hatOverrideStatus;
+                    mout.send(NOTE_ON, 15, OFF);
+                    for (40 => int i; i < 48; i++) {
+                        padStateRaw[i] => padState[i];
+                        padStateToColor(padStateRaw[i]) => int color;
+                        if (color == -1) {
+                            spork ~ flashButton(i);
+                        } else {
+                            mout.send(NOTE_ON, i, color);
+                        }
+                    }
+                }
+            }
+
+            // CLAP OVERRIDE (pads 6/7, pads 32-39)
+            else if (pad == 6 && inputType == NOTE_ON) {
+                if (clapOverrideSTatus != 1) {
+                    mout.send(NOTE_ON, 6, GREEN);
+                    mout.send(NOTE_ON, 7, OFF);
+                    for (32 => int i; i < 40; i++) {
+                        if (clapOverrideSTatus == 0) padState[i] => padStateRaw[i];
+                        1 => padState[i];
+                        mout.send(NOTE_ON, i, RED);
+                    }
+                    1 => clapOverrideSTatus;
+                } else {
+                    0 => clapOverrideSTatus;
+                    mout.send(NOTE_ON, 6, OFF);
+                    for (32 => int i; i < 40; i++) {
+                        padStateRaw[i] => padState[i];
+                        padStateToColor(padStateRaw[i]) => int color;
+                        if (color == -1) {
+                            spork ~ flashButton(i);
+                        } else {
+                            mout.send(NOTE_ON, i, color);
+                        }
+                    }
+                }
+            } else if (pad == 7 && inputType == NOTE_ON) {
+                if (clapOverrideSTatus != 2) {
+                    mout.send(NOTE_ON, 7, RED);
+                    mout.send(NOTE_ON, 6, OFF);
+                    for (32 => int i; i < 40; i++) {
+                        if (clapOverrideSTatus == 0) padState[i] => padStateRaw[i];
+                        0 => padState[i];
+                        mout.send(NOTE_ON, i, OFF);
+                    }
+                    2 => clapOverrideSTatus;
+                } else {
+                    0 => clapOverrideSTatus;
+                    mout.send(NOTE_ON, 7, OFF);
+                    for (32 => int i; i < 40; i++) {
+                        padStateRaw[i] => padState[i];
+                        padStateToColor(padStateRaw[i]) => int color;
+                        if (color == -1) {
+                            spork ~ flashButton(i);
+                        } else {
+                            mout.send(NOTE_ON, i, color);
+                        }
+                    }
+                }
+            } else if (pad == 88 && inputType == NOTE_ON) {
+                toNode.start("/kill");
+                2 => toNode.add;
+                toNode.send();
+                mout.send(NOTE_ON, 88, RED);
+                0.0 => bongoBusCenter.gain;
             }
         }
     }
@@ -658,12 +862,10 @@ fun dur noteToBongoInterval(int i) {
     } else if (i == 2) {
         return (5.0 / 6.0) * bongoIntervalBase; // (minor third)
     } else if (i == 3) {
-        return (3.0 / 4.0) * bongoIntervalBase; //  (perfect fifth)
-    } else if (i == 4) {
         return (2.0 / 3.0) * bongoIntervalBase; //  (perfect fifth)
-    } else if (i == 5) {
+    } else if (i == 4) {
         return (5.0 / 8.0) * bongoIntervalBase; //  (minor sixth)
-    } else if (i == 6) {
+    } else if (i == 5) {
         return (1.0 / 2.0) * bongoIntervalBase; //  (octave)
     }
     return bongoIntervalBase; // (root)
@@ -680,7 +882,7 @@ fun void prepMelodyMode() {
     toChuck.send();
 
     mout.send(NOTE_ON, 0, GREEN);
-    for (1 => int i; i < 7; i++) {
+    for (1 => int i; i < 6; i++) {
         mout.send(NOTE_ON, i, RED);
     }
     mout.send(NOTE_ON, 8, GREEN);
@@ -709,6 +911,19 @@ fun void flashButton(int pad) {
         mout.send(NOTE_ON, pad, OFF);
         125::ms => now;
     }
+}
+
+fun int padStateToColor(int padState) {
+    if (padState == 0) {
+        return OFF;
+    } else if (padState == 1) {
+        return RED;
+    } else if (padState == 2) {
+        return GREEN;
+    } else if (padState == 3) {
+        return  -1;
+    }
+    return OFF; // default
 }
 
 fun void setUp() {
@@ -759,13 +974,13 @@ fun void setUp() {
     mout.send(NOTE_ON, 7, OFF);
     mout.send(NOTE_ON, 89, OFF);
 
+    // Use padStateToColor for all pads to ensure correct light alignment
     for (int i; i < 64; i++) {
-        if (padState[i] == 0) {
-            mout.send(NOTE_ON, i, OFF);
-        } else if (padState[i] == 1) {
-            mout.send(NOTE_ON, i, RED);
-        } else if (padState[i] == 2) {
-            mout.send(NOTE_ON, i, GREEN);
+        padStateToColor(padState[i]) => int color;
+        if (color == -1) {
+            spork ~ flashButton(i);
+        } else {
+            mout.send(NOTE_ON, i, color);
         }
     }
 }

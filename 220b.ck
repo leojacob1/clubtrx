@@ -126,6 +126,7 @@ fun setUp() {
   mout.send(144, 15, OFF);
   mout.send(144, 0, OFF);
   mout.send(144, 7, OFF);
+  mout.send(144, 88, OFF);
   mout.send(144, 89, OFF);
 } spork ~ setUp();
 
@@ -462,6 +463,8 @@ fun playPots() {
           -1 => activePotId;
         } else {
           bufPots.pos(bufPots.samples());
+          // Always wait a full beat even if pad is off
+          eighth => now;
         }
       }
     }
@@ -484,8 +487,8 @@ fun playKick() {
           bufKick[i - 48].pos(0);
           eighth => now;
         }
-
       } else {
+        // Always wait a full beat even if pad is off
         eighth => now;
       }
     }
@@ -545,6 +548,7 @@ fun playFadi() {
             -2 => shiftFadi1.shift;
           }
         } else {
+          // Always wait a full beat even if pad is off
           eighth => now;
         }
       }
@@ -606,5 +610,4 @@ while (mode < 22) {
     100::ms => now;
 }
 
-<<< "GOODBYE WORLD" >>>;
 me.exit();
