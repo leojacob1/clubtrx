@@ -9,9 +9,13 @@ toChuck.dest(host, chuckPort);
 
 Gain bongoBusLeft => dac.left;
 Gain bongoBusRight => dac.right;
-Gain bongoBusCenter => Gain gain_bongo => ADSR bongoEnv => Gain gain_monitor_bongo => LPF lpf_bongo => JCRev rev_bongo => Pan2 pan_bongo_instrument => dac;
+Gain bongoBusCenter => Gain gain_bongo => Gain gain_bongo_slider => ADSR bongoEnv => LPF lpf_bongo => JCRev rev_bongo => Pan2 pan_bongo_instrument => dac;
 
-0.7 => float GAIN_BONGO => gain_bongo.gain;
+// ROOM ADJUSTMENT VARS
+
+0.7 => float bassAdjustment;
+1.0 => float clapAdjustment;
+1.0 => float hatAdjustment;
 
 10000 => lpf_bongo.freq;
 0.0 => rev_bongo.mix;
@@ -28,15 +32,19 @@ GameTrak gt;
 "bleep.wav" => string bleep_path;
 "printingpress.wav" => string printing_path;
 "progbass3.wav" => string bass_path;
-// "progbass4.wav" => string bass2_path;
 
 // Sndbufs for rhythmic elements in second part
 SndBuf buf_print => Gain gain_print => Pan2 pan_print => dac;
 SndBuf buf_bass => Gain gain_monitor_bass => Gain gain_bass => dac;
-// SndBuf buf_bass2 => gain_monitor_bass => Gain gain_bass2 => dac;
-SndBuf buf_hat => Gain gain_monitor_hat => Gain gain_hat => dac;
-SndBuf buf_clap => Gain gain_monitor_clap => Gain gain_clap => dac;
+SndBuf buf_hat => Gain gain_monitor_hat => Gain gain_hat => Gain gain_hat_slider => dac;
+SndBuf buf_clap => Gain gain_monitor_clap => Gain gain_clap => Gain gain_clap_slider => dac;
 SndBuf buf_bleep => JCRev rev_bleep => Gain gain_bleep => dac;
+
+0.7 => float GAIN_BUF_BONGO => gain_bongo.gain;
+0.35 * bassAdjustment => buf_bass.gain;
+1.0 * clapAdjustment => buf_clap.gain;
+0.2 * hatAdjustment => buf_hat.gain;
+0.2 => buf_print.gain;
 
 0.05 => rev_bleep.mix;
 // Arrays to hold bufs and panners
@@ -44,28 +52,17 @@ SndBuf bufs_bongo_high[N];
 ADSR adsr_bongo_high[N];
 Pan2 pans_bongo_high[N];
 
-// Connect each buffer to a pan and to dac
-// Need panned buses and a center bus that can handle envelope
 "sounds/" + printing_path => buf_print.read;
 "sounds/" + bass_path => buf_bass.read;
-// "sounds/" + bass2_path => buf_bass2.read;
 "sounds/" + hat_path => buf_hat.read;
 "sounds/" + clap_path => buf_clap.read;
 "sounds/" + bleep_path => buf_bleep.read;
 
 buf_print.samples() => buf_print.pos;
 buf_bass.samples() => buf_bass.pos;
-// buf_bass2.samples() => buf_bass2.pos;
 buf_hat.samples() => buf_hat.pos;
 buf_clap.samples() => buf_clap.pos;
 buf_bleep.samples() => buf_bleep.pos;
-
-0.2 => gain_print.gain;
-0.35 => gain_bass.gain;
-// 0.7 => gain_bass2.gain;
-0.3 => gain_hat.gain;
-0.7 => gain_clap.gain;
-0.7 => gain_bleep.gain;
 
 for (int i; i < N; i++) {
     adsr_bongo_high[i].set(5::ms, 0::ms, 1.0, 5::ms);
@@ -139,7 +136,7 @@ fun void setBongoIntervalFreestyle() {
 
 fun void playBongoBuild() {
     getDiscretizedGt0(2) => discretizedGt0;
-    1.0 => GAIN_BONGO => gain_bongo.gain;
+    1.0 => GAIN_BUF_BONGO => gain_bongo.gain;
     while (true) {
         (gt.axis[1] + 1.0) / 2.0 * 10000.0 + 100.0 => lpf_bongo.freq;
         gt.axis[2] => gain_bongo.gain;
@@ -188,29 +185,12 @@ fun void changeBongoHighEnvelope() {
   }
 }
 
-0 => int isBongoEnvPulsing;
-// fun void graphicBongo() {
-//     while (true) {
-//         if (isBongoEnvPulsing) {
-//             // toNode.start( "/bongoEnvParams" );
-//             // (bongoEnv.attackTime() / ms) => toNode.add;
-//             // (bongoEnv.decayTime() / ms) + (bongoEnv.releaseTime() / ms) => toNode.add;
-//             // toNode.send();
-//         }
-//         10::ms => now;
-//     }
-// }
 
 fun void pulseBongoHighEnvelope() {
-    // spork ~ graphicBongo();
     bongoEnv.keyOn();
     0 => int i;
     while (true) {
         if (Math.max(0, discretizedGt0) > 0.1) {
-            1 => isBongoEnvPulsing;
-            // toNode.start( "/bongoEnvOn" );
-            // isBongoEnvPulsing => toNode.add;
-            // toNode.send();
             bongoEnv.keyOn();
             (20 + (1 - Math.max(0, discretizedGt0)) * 600)::ms => now; 
             bongoEnv.keyOff();
@@ -221,10 +201,6 @@ fun void pulseBongoHighEnvelope() {
             }
             (40 + (1 - Math.max(0, discretizedGt0)) * 500)::ms => now; 
         } else {
-            0 => isBongoEnvPulsing;
-            // toNode.start( "/bongoEnvOn" );
-            // isBongoEnvPulsing => toNode.add;
-            // toNode.send();
             bongoEnv.keyOn();
             10::ms => now;
         }
@@ -232,25 +208,20 @@ fun void pulseBongoHighEnvelope() {
 
 }
 
-0 => int isManualPrint;
 fun playPrint() {
     (buf_print.samples() / 44100.0) / (quarterIntervalMs * 8 / 1000) => buf_print.rate;
     while (true) {
         0 => int hasPlayed;
-        if (!isManualPrint) {
-        for (48 => int i; i < 56; i++) {
-            if (isManualPrint) {
-                buf_print.pos(buf_print.samples());
-            } else if (padState[i]) {
+        for (56 => int i; i < 64; i++) {
+            if (padState[i]) {
                 1 => hasPlayed;
-                Math.fabs(4.0 - (i - 48.0)) / 4.0 * 1.8 - 0.9 => pan_print.pan;
-                buf_print.pos(buf_print.samples() / 8 * (i - 48));
+                Math.fabs(4.0 - (i - 56.0)) / 4.0 * 1.8 - 0.9 => pan_print.pan;
+                buf_print.pos(buf_print.samples() / 8 * (i - 56));
                 quarterIntervalMs::ms => now;
             } else {
                 buf_print.pos(buf_print.samples());
                 quarterIntervalMs::ms => now;
             }
-        }
         }
         if (!hasPlayed) quarterIntervalMs::ms => now;
     }
@@ -263,7 +234,7 @@ fun playBassOnce() {
 fun void playBass() {
     spork ~ graphicBass();
     while (true) {
-        for (56 => int i; i < 64; i++) {
+        for (48 => int i; i < 56; i++) {
             if (!padState[i]) {
                 quarterIntervalMs::ms => now;
             } else if (padState[i] == 1) {
@@ -284,12 +255,12 @@ fun void graphicBass() {
         gain_monitor_bass.last() => float bassGain;
         
         Math.pow(Math.min(0.5, Math.fabs(bassGain)), 3) => bassGain;
-        if (bassGain < 0.0000001) {
-            0 => bassGain;
-        } else if (bassGain < 0.1) {
-            0.006 => bassGain;
+        if (bassGain < 0.0000001 * bassAdjustment) {
+            0 / bassAdjustment => bassGain;
+        } else if (bassGain < 0.1 * bassAdjustment) {
+            0.006 / bassAdjustment => bassGain;
         }
-        bassGain * 200 => toNode.add;
+        bassGain * 200 / bassAdjustment => toNode.add;
         toNode.send();
         10::ms => now;
     }
@@ -299,7 +270,7 @@ fun void graphicHat() {
     while (true) {
         toNode.start( "/hatGain" );
         gain_monitor_hat.last() => float hatGain;
-        Math.fabs(hatGain) * 700 => hatGain;
+        Math.fabs(hatGain) * 700 / hatAdjustment => hatGain;
         hatGain => toNode.add;
         toNode.send();
         20::ms => now;
@@ -310,7 +281,7 @@ fun void graphicClap() {
     while (true) {
         toNode.start( "/clapGain" );
         gain_monitor_clap.last() => float clapGain;
-        Math.fabs(clapGain) * 700 => clapGain;
+        Math.fabs(clapGain) * 700 / clapAdjustment => clapGain;
         clapGain => toNode.add;
         toNode.send();
         20::ms => now;
@@ -328,18 +299,24 @@ fun void playClap() {
             if (!padState[i]) {
                 quarterIntervalMs::ms => now;
             } else if (padState[i] == 1) {
+                1.0 => gain_clap.gain;
                 spork ~ playClapOnce();
                 quarterIntervalMs::ms => now;
             } else if (padState[i] == 2) {
+                1.0 => gain_clap.gain;
                 spork ~ playClapOnce();
                 (quarterIntervalMs / 2)::ms => now;
+                0.7 => gain_clap.gain;
                 spork ~ playClapOnce();
                 (quarterIntervalMs / 2)::ms => now;
             } else if (padState[i] == 3) {
+                1.0 => gain_clap.gain;
                 spork ~ playClapOnce();
                 (quarterIntervalMs / 3)::ms => now;
+                0.7 => gain_clap.gain;
                 spork ~ playClapOnce();
                 (quarterIntervalMs / 3)::ms => now;
+                0.65 => gain_clap.gain;
                 spork ~ playClapOnce();
                 (quarterIntervalMs / 3)::ms => now;
             }
@@ -473,7 +450,7 @@ fun void runPad() {
                 } else if (nextState == 3) {
                     spork ~ flashButton(pad);
                 }
-            } else if (48 <= pad && pad < 56 && inputType == NOTE_ON) {
+            } else if (56 <= pad && pad < 64 && inputType == NOTE_ON) {
                 // printing
                 if (!padState[pad]) {
                     1 => padState[pad];
@@ -482,7 +459,7 @@ fun void runPad() {
                     0 => padState[pad];
                     mout.send(NOTE_ON, pad, OFF);
                 }
-            } else if (pad >= 56 && pad < 64 && inputType == NOTE_ON) {
+            } else if (pad >= 48 && pad < 56 && inputType == NOTE_ON) {
                 // Bass single rhythms
                 (padState[pad] + 1) % 3 => int nextState;
                 if (isShifted) 0 => nextState;
@@ -500,7 +477,7 @@ fun void runPad() {
                     0.0 => gain_bongo.gain;
                     mout.send(NOTE_ON, 89, RED);
                 } else if (inputType == NOTE_OFF) {
-                    GAIN_BONGO => gain_bongo.gain;
+                    GAIN_BUF_BONGO => gain_bongo.gain;
                     mout.send(NOTE_ON, 89, OFF);
                 }
             } else if (pad == 98) {
@@ -513,6 +490,18 @@ fun void runPad() {
                 }
             } else if (pad == 86 && inputType == NOTE_ON) {
                 0 => buf_bleep.pos;
+            } else if (inputType == SLIDER) {
+                if (pad == 48) {
+                    Math.pow(velocity / 127.0, 2) => gain_print.gain;
+                } else if (pad == 49) {
+                    Math.pow(velocity / 127.0, 2) => gain_bass.gain;
+                } else if (pad == 50) {
+                    Math.pow(velocity / 127.0, 2) => gain_hat_slider.gain;
+                } else if (pad == 51) {
+                    Math.pow(velocity / 127.0, 2) => gain_clap_slider.gain;
+                } else if (pad == 56) {
+                    Math.pow(velocity / 127.0, 2) => gain_bongo_slider.gain;
+                }
             }
         }
     }
@@ -729,16 +718,17 @@ fun void setUp() {
     for (56 => int i; i < 64; i++) {
         0 => padState[i];
     }
-    1 => padState[56];
-    2 => padState[57];
-    1 => padState[59];
+    1 => padState[60];
+    1 => padState[61];
+    1 => padState[62];
+    1 => padState[63];
     for (48 => int i; i < 56; i++) {
         0 => padState[i];
     }
-    1 => padState[52];
-    1 => padState[53];
-    1 => padState[54];
-    1 => padState[55];
+    1 => padState[48];
+    2 => padState[49];
+    1 => padState[51];
+
     for (40 => int i; i < 48; i++) {
         0 => padState[i];
     }

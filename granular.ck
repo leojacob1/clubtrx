@@ -19,7 +19,6 @@ toNode.dest(host, nodePort);
 .001 => float GRAIN_POSITION_RANDOM;
 // grain jitter (0 == periodic fire rate)
 1 => float GRAIN_FIRE_RANDOM;
-
 // max lisa voices
 30 => int LISA_MAX_VOICES;
 
@@ -31,7 +30,12 @@ Shred mainSh;
 
 // patch it
 Gain g => NRev reverb => PoleZero blocker => dac;
-// 0 => g.gain;
+
+// ROOM ADJUSTMENT VARS
+
+1.0 => float pluckAdjustment;
+1.0 => float bassAdjustment;
+
 // connect
 // load file into a LiSa (use one LiSa per sound)
 SoundFiles soundfiles;
@@ -41,6 +45,7 @@ LiSa lisas[soundfiles.pluck.size()];
 for (int i; i < soundfiles.pluck.size(); i++) {
     load(soundfiles.pluck[i]) @=> lisas[i];
     lisas[i].chan(0) => g;
+    1.0 * pluckAdjustment => lisas[i].gain;
     <<< soundfiles.pluck[i], "lisa loaded" >>>;
 }
 
@@ -49,7 +54,7 @@ LiSa lisaBass[soundfiles.bass.size()];
 for (int i; i < soundfiles.bass.size(); i++) {
     load(soundfiles.bass[i]) @=> lisaBass[i];
     lisaBass[i].chan(0) => g;
-    1.5 => lisaBass[i].gain;
+    1.5 * bassAdjustment => lisaBass[i].gain;
     <<<soundfiles.bass[i], "lisa loaded" >>>;
 }
 
@@ -79,12 +84,9 @@ fun void listenKey()
         while ( oin.recv( msg ) )
         {
             msg.getFloat(0) => keyHz;
-            <<< "original", keyHz >>>;
             getTargetHzInOctave(keyHz) => keyHz;
-            <<< "octave adjust", keyHz >>>;
             getClosestKeyIndex(keyHz) => closestKeyIndex;
             keyHz / soundfiles.bassHz[closestKeyIndex] => GRAIN_PLAY_RATE;
-            <<< "rate", GRAIN_PLAY_RATE >>>;
         }
     }
 }
@@ -101,16 +103,6 @@ fun void listenMode() {
         while ( oin.recv( msg ) )
         {
             msg.getInt(0) => mode;
-            // if (mode == 22 || mode == 77) {
-            //     spork ~ listenGt() @=> listenGtSh;
-            //     spork ~ trackSynthParams() @=> trackSynthParamsSh;
-            //     spork ~ main() @=> mainSh;
-            // } else {
-            //     Machine.remove(listenGtSh.id());
-            //     Machine.remove(trackSynthParamsSh.id());
-            //     Machine.remove(mainSh.id());
-            // }
-            <<< "mode", mode >>>;
         }
     }
 }
@@ -260,20 +252,6 @@ fun void grain( LiSa @ lisa, dur pos, dur grainLen, dur rampUp, dur rampDown, fl
     }
 }
 
-// print
-fun void print()
-{
-    // time loop
-    while( true )
-    {
-        // values
-        <<< "pos:", GRAIN_POSITION, "random:", GRAIN_POSITION_RANDOM,
-        "rate:", GRAIN_PLAY_RATE, "size:", GRAIN_LENGTH/second >>>;
-        // advance time
-        100::ms => now;
-    }
-}
-
 // load file into a LiSa
 fun LiSa load( string filename )
 {
@@ -306,7 +284,6 @@ spork ~ listenKey();
 spork ~ listenMode();
 
 fun int getClosestKeyIndex(float targetHz) {
-    <<< "getting closest key from", targetHz >>>;
     0 => int minIndex;
 
     Math.fabs(targetHz - soundfiles.bassHz[0]) => float minDiff;
@@ -317,7 +294,6 @@ fun int getClosestKeyIndex(float targetHz) {
             Math.fabs(targetHz - soundfiles.bassHz[i]) => minDiff;
         }
     }
-    <<< "minindex", minIndex, "mindistance", minDiff >>>;
     return minIndex;
 }
 
@@ -331,7 +307,6 @@ fun float getTargetHzInOctave(float targetHz) {
             <<< "too high! dropping down" >>>;
             0.5 * targetHz => targetHz;
         } else {
-            <<< "right octave" >>>;
             1 => isRightOctave;
         }
     }
