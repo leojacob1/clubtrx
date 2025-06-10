@@ -45,7 +45,7 @@ LiSa lisas[soundfiles.pluck.size()];
 for (int i; i < soundfiles.pluck.size(); i++) {
     load(soundfiles.pluck[i]) @=> lisas[i];
     lisas[i].chan(0) => g;
-    1.0 * pluckAdjustment => lisas[i].gain;
+    0.6 * pluckAdjustment => lisas[i].gain;
     <<< soundfiles.pluck[i], "lisa loaded" >>>;
 }
 
@@ -54,19 +54,19 @@ LiSa lisaBass[soundfiles.bass.size()];
 for (int i; i < soundfiles.bass.size(); i++) {
     load(soundfiles.bass[i]) @=> lisaBass[i];
     lisaBass[i].chan(0) => g;
-    1.5 * bassAdjustment => lisaBass[i].gain;
+    2.2 * bassAdjustment => lisaBass[i].gain;
     <<<soundfiles.bass[i], "lisa loaded" >>>;
 }
 
 
-int chords[6][2];
+int chords[3][2];
 
-[10, 0] @=> chords[0];
-[10, 11] @=> chords[1];
-[3, 0] @=> chords[2];
-[3, 11] @=> chords[3];
-[0, 0] @=> chords[4];
-[0, 11] @=> chords[5];
+[10, 0, 0] @=> chords[0];
+// [10, 11] @=> chords[1];
+// [3, 0] @=> chords[2];
+[6, 1, 6] @=> chords[1];
+[3, 2, 7 /* octave up? */] @=> chords[2];
+// [0, 11] @=> chords[5];
 
 0.0 => float keyHz;
 0 => int closestKeyIndex;
@@ -174,12 +174,22 @@ fun void trackSynthParams()
             100::ms => now;
             continue;
         }
-        mapAxis2Range(gt[2], 0.1, 0.5, 0.0, 1.0) => g.gain;
-        mapAxis2Range(-gt[5], -0.5, 0.0, 0.01, 0.2) => GRAIN_POSITION;
+        mapAxis2Range(gt[2], 0.1, 0.9, 0.0, 1.0) => g.gain;
+        mapAxis2Range(-gt[5], -0.9, 0.0, 0.01, 0.2) => GRAIN_POSITION;
         // Math.sqrt(Math.pow(gt.axis[4], 1.5) + Math.pow(gt.axis[3], 1.5)) => float rightJoyStickXYInput;
         // <<< rightJoyStickXYInput, gt.axis[4] >>>;
-        250 * Math.pow(gt[4], 2) + 500 * gt[4] + 250 => float lengthInput;
-        mapAxis2Range(lengthInput, 1.0, 1000.0, 1.3, 1000.0)::ms => GRAIN_LENGTH; // TODO: make this diff scale
+        if (mode == 88) {
+            50 * Math.pow(-gt[3], 2) + 550 * -gt[3] + 250 => float lengthInput;
+            mapAxis2Range(lengthInput, 1.0, 1000.0, 10.0, 1000.0)::ms => GRAIN_LENGTH; // TODO: make this diff scale
+            if (gt[0] < 0) {
+                2 => currentChordIndex;
+            } else {
+                1 => currentChordIndex;
+            }
+            if (gt[1] > 0) 0 => currentChordIndex;
+        } else {
+            500::ms => GRAIN_LENGTH;
+        }
         toNode.start( "/granular" );
         g.gain() => toNode.add;
         GRAIN_POSITION => toNode.add;
@@ -202,7 +212,10 @@ fun void main()
             continue;
         }
         fireGrain(lisaBass[(closestKeyIndex + chords[currentChordIndex][0]) % 12]);
-        fireGrain(lisas[(closestKeyIndex + chords[currentChordIndex][1]) % 12]); 
+        if (mode == 88) {
+            fireGrain(lisas[(closestKeyIndex + chords[currentChordIndex][1]) % 12]); 
+            fireGrain(lisas[(closestKeyIndex + chords[currentChordIndex][2]) % 12]); 
+        }
         // fireGrain(lisas[(closestKeyIndex + chords[currentChordIndex][2]) % 12]); 
         // fireGrain(lisas[(closestKeyIndex + chords[currentChordIndex][3]) % 12]);
 

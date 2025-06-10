@@ -217,7 +217,7 @@ fun void runPad() {
           }
           spork ~ playManualFadi();
         } else if (inputType == SLIDER) {
-          if (pad == 48) {
+          if (pad == 56) {
             Math.pow(velocity / 127.0, 2) => gainPots.gain;
           } else if (pad == 49) {
             Math.pow(velocity / 127.0, 2) => gainKickMaster.gain;
@@ -463,8 +463,6 @@ fun playPots() {
           -1 => activePotId;
         } else {
           bufPots.pos(bufPots.samples());
-          // Always wait a full beat even if pad is off
-          eighth => now;
         }
       }
     }
@@ -598,9 +596,9 @@ fun void graphicPots() {
 fun void graphicFadi() {
   while (true) {
     toNode.start( "/hatGain" );
-    Math.fabs(gain_monitor_fadi.last()) => float hatGain;
+    Math.fabs(gain_monitor_fadi.last()) => float fadiGain;
 
-    hatGain * 60 / fadiAdjustment => toNode.add;
+    fadiGain * 110 / fadiAdjustment => toNode.add;
     toNode.send();
     10::ms => now;
   }

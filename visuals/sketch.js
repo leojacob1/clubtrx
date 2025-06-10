@@ -27,7 +27,7 @@ let cols, rows;
 let staticSize = 8;
 let staticFlashRate = 3;
 let frameCounter = 0;
-let staticColors;
+let staticColor;
 
 function setup() {
   frameRate(24);
@@ -50,22 +50,12 @@ function setup() {
   grainLength = 0;
 
   // Random colors
-  bassCircleColor = color(random(255), random(255), random(255));
-  hatTriangleColor = color(random(255), random(255), random(255));
-  clapRectangleColor = color(random(255), random(255), random(255));
+  bassCircleColor = color(140, 21, 21);
+  hatTriangleColor = color(0, 103, 58);
+  clapRectangleColor = color(237, 170, 55);
 
   // Static palette
-  staticColors = [
-    // color(241, 9, 210),
-    // color(100, 90, 99),
-    // color(127, 85, 107),
-    // color(82, 96, 81),
-    // color(199, 133, 209),
-    // color(138, 196, 155),
-    color(239, 236, 243),
-    // color(16, 228, 208),
-    // color(254, 240, 49)
-  ];
+  staticColor = color(239, 236, 243);
 
   cols = ceil(width / staticSize);
   rows = ceil(height / staticSize);
@@ -99,7 +89,7 @@ function setup() {
         hatGain = 0;
         clapGain = 0;
         bassGain = 0;
-        isPotsOn = 1;
+        isPotsOn = 0;
       } else if (msg.args[0] == 2) {
         potGain = 0;
         hatGain = 0;
@@ -141,7 +131,7 @@ function draw() {
         map(sin(distFromCenter * 0.15), -1, 1, 0.8, random() * 0.4 + map(grainGain, 0, 1, 0.9, 0.3)) -
           staticLineIntensity * (((i + staticLineSpeed * frameCounter % (cols / 3)) % (cols / 3 + 0.1)) / (cols / 3))
       ) {
-        let c = random(staticColors);
+        let c = staticColor;
         c.setAlpha(random(120, 200));
         staticSquares[i] = c;
       } else {
@@ -154,7 +144,7 @@ function draw() {
     for (let x = 0; x < cols; x++) {
       let i = y * cols + x;
       if (staticSquares[i]) {
-        staticSquares[i].setAlpha(staticAlpha);
+        staticSquares[i].setAlpha(random() * staticAlpha + (staticAlpha / 2));
         fill(staticSquares[i]);
         rect(x * staticSize, y * staticSize, staticSize, staticSize);
       }
@@ -167,7 +157,7 @@ function draw() {
     textSize(256);
     fill(255);
     textAlign(CENTER, CENTER);
-    text(`Act ${mode === 0 ? 'I' : 'II'}`, width / 2, (1 - textHeight) * height + 200);
+    text(`Act ${mode === 0 ? 'I' : 'II'}`, width / 2, (1 - textHeight) * height + 250);
   }
 
   // Hide all shapes if /kill 2 was received
@@ -215,7 +205,7 @@ function draw() {
       fill(clapRectangleColor);
       rect(potNewX, potNewY, 120, 120);
     }
-  } else if (mode >= 22) {
+  } else if (mode >= 33) {
     let clapOffsetX = random(-clapGain, clapGain);
     let clapOffsetY = random(-clapGain, clapGain);
     let clapNewX = constrain(squareBaseX + clapOffsetX, 50, width - 50);
